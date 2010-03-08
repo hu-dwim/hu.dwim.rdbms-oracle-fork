@@ -1,0 +1,8 @@
+repo:/home/hlavaty/repo/dwim.hu/local/live/hu.dwim.rdbms
+thisrepo:/home/hlavaty/src/ktbs/SBCL-PEREC/lisp-cms/thirdparty/tmp/hu.dwim.rdbms
+cache:/home/hlavaty/.darcs/cache
+repo:/home/hlavaty/repo/dwim.hu/remote/live/hu.dwim.rdbms
+repo:http://dwim.hu/live/hu.dwim.rdbms
+repo:/opt/darcs/hu.dwim.rdbms
+thisrepo:/opt/hu.dwim.home/workspace/hu.dwim.rdbms
+cache:/home/alendvai/.darcs/cache
