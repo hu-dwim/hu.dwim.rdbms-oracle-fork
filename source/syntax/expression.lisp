@@ -318,6 +318,8 @@
 
 (def aggregate-function count)
 
+(def aggregate-function distinct)
+
 (def aggregate-function min)
 
 (def aggregate-function max)
