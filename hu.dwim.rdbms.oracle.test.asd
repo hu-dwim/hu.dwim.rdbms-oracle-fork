@@ -11,6 +11,7 @@
 (defsystem :hu.dwim.rdbms.oracle.test
   :class hu.dwim.test-system
   :package-name :hu.dwim.rdbms.test
+  :test-name "TEST/ORACLE"
   :depends-on (:hu.dwim.rdbms.oracle
                :hu.dwim.rdbms.test)
   :components ((:module "test"

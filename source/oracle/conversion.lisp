@@ -21,7 +21,8 @@
 ;;; Boolean conversions
 
 (def function boolean-to-char (value)
-  (foreign-oci-string-alloc (if value "T" "F") :null-terminated-p #f))
+  (foreign-oci-string-alloc (if (member value '(nil "FALSE") :test #'equal) "F" "T")
+                            :null-terminated-p #f))
 
 (def function boolean-from-char (ptr len)
   (assert (= len (oci-char-width)))
@@ -79,6 +80,7 @@
 ;;; Float conversions
 
 (def function float-to-bfloat (value)
+  (assert (or (floatp value) (integerp value))) ;; not rational, why?
   (values
    (cffi:foreign-alloc :float :initial-element (coerce value 'single-float))
    4))
@@ -88,6 +90,7 @@
   (cffi:mem-ref ptr :float))
 
 (def function double-to-bdouble (value)
+  (assert (or (floatp value) (integerp value))) ;; not rational, why?
   (values
    (cffi:foreign-alloc :double :initial-element (coerce value 'double-float))
    8))
@@ -152,50 +155,24 @@
   (declare (ignore length)) ; null terminated
   (oci-string-to-lisp ptr))
 
-(def function string-to-long-varchar (str)
-  (let* ((encoding (connection-encoding-of (database-of *transaction*)))
-         (character-width (cffi::null-terminator-len encoding))
-         (str-len (* character-width (length str)))
-         (ptr (cffi::foreign-alloc :char
-                                   :count (+ (cffi:foreign-type-size 'oci:sb-4) ; length field
-                                             str-len
-                                             character-width ; for terminating null added by the cffi call
-                                             ))))
-    (setf (cffi:mem-ref ptr 'oci:sb-4) str-len)
-    (cffi:lisp-string-to-foreign str
-                                 (cffi:inc-pointer ptr (cffi:foreign-type-size 'oci:sb-4))
-                                 (+ str-len character-width)
-                                 :encoding encoding)
-    (values ptr (+ str-len 4))))
+(def function string-to-clob (str)
+  (declare (ignore str))
+  (make-lob-locator))
 
-(def function string-from-long-varchar (ptr len)
-  (assert (>= len 4))
-  (oci-string-to-lisp
-   (cffi:inc-pointer ptr (cffi:foreign-type-size 'oci:sb-4))
-   (cffi:mem-ref ptr 'oci:sb-4)))
+(def function string-from-clob (ptr len)
+  (assert (= #.(cffi:foreign-type-size :pointer) len))
+  (download-clob (cffi:mem-ref ptr :pointer)))
 
 ;;;;;;
 ;;; Binary data conversions
 
-(def function byte-array-to-long-varraw (ba)
+(def function byte-array-to-blob (ba)
   (assert (typep ba 'vector)) ; '(vector (unsigned-byte 8))
-  (let* ((len (length ba))
-         (ptr (cffi::foreign-alloc 'oci:ub-1 :count (+ len 4))))
-    (setf (cffi:mem-ref ptr :int32) len)
-    (loop for byte across ba
-          for i from 4
-          do (setf (cffi:mem-aref ptr 'oci:ub-1 i) byte))
-    (values ptr (+ len 4))))
+  (make-lob-locator))
 
-(def function byte-array-from-long-varraw (ptr len)
-  (assert (>= len 4))
-  (let* ((size (cffi:mem-ref ptr 'oci:sb-4))
-         (result (make-array size)))
-    (loop for i from 0 below size
-          do (setf (aref result i)
-                   (cffi:mem-aref ptr 'oci:ub-1 (+ 4 i))))
-    result))
-
+(def function byte-array-from-blob (ptr len)
+  (assert (= #.(cffi:foreign-type-size :pointer) len))
+  (download-blob (cffi:mem-ref ptr :pointer)))
 
 ;;;;;;
 ;;; Datetime conversions
@@ -204,6 +181,7 @@
 ;; - when losing resolution, use nsec and round up to sec
 ;; - what about the timezone? is this what we want?
 (def function local-time-to-date (timestamp)
+  (assert (local-time::%valid-date? timestamp))
   (with-decoded-timestamp (:sec ss :minute mm :hour hh :day day :month month :year year :timezone +utc-zone+)
       timestamp
     (bind (((:values century year) (floor year 100))
@@ -271,6 +249,10 @@
                       month
                       year
                       :timezone +utc-zone+)))
+
+(def function local-time-to-time (timestamp)
+  (assert (local-time::%valid-time-of-day? timestamp))
+  (local-time-to-timestamp timestamp))
 
 ;; TODO rename to something like to-oracle-timestamp
 (def function local-time-to-timestamp (timestamp)
@@ -355,7 +337,7 @@
                                            hh
                                            mm
                                            ss
-                                           (round (/ nsec 1000))
+                                           nsec
                                            c-timezone-ptr
                                            c-timezone-size))))
     (values
@@ -396,7 +378,7 @@
                                                       offset-hour
                                                       offset-minute))
 
-        (encode-timestamp (round (/ (cffi:mem-ref fsec 'oci:ub-4) 1000))
+        (encode-timestamp (cffi:mem-ref fsec 'oci:ub-4)
                           (cffi:mem-ref sec 'oci:ub-1)
                           (cffi:mem-ref min 'oci:ub-1)
                           (cffi:mem-ref hour 'oci:ub-1)
@@ -471,7 +453,7 @@ digit is the first or NIL for 0."
 (def function timezone-as-HHMM-string (timestamp)
   "Returns the time-zone of TIMESTAMP in [+-]HH:MM format."
   (declare (ignore timestamp))
-  (let ((offset (not-yet-implemented) #+nil(timezone timestamp))) 
+  (let ((offset 0 #+nil(not-yet-implemented) #+nil(timezone timestamp))) ;; TODO THL fix this properly?
     (multiple-value-bind (hour sec) (floor (abs offset) 3600)
       (format nil "~C~2,'0D:~2,'0D"
               (if (> offset 0) #\+ #\-)

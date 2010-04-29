@@ -93,26 +93,26 @@
                            (setf (cffi:mem-ref blob :int8 i) el))
                      (hu.dwim.rdbms.sqlite.cffi:sqlite-3-bind-blob foreign-statement i blob (length value) sqlite3-transient))))
             (process-error-code
-             (cond ((typep binding-type 'sql-boolean-type)
-                    (hu.dwim.rdbms.sqlite.cffi:sqlite-3-bind-int foreign-statement i (if binding-value 1 0)))
-                   ((typep binding-type 'sql-integer-type)
-                    (if (typep binding-value '(signed-byte 64))
-                        (hu.dwim.rdbms.sqlite.cffi:sqlite-3-bind-int-64 foreign-statement i binding-value)
-                        ;; TODO: bind as a blob
-                        (error "Integer ~A does not fit into (signed-byte 64)" binding-value)))
-                   ((typep binding-type 'sql-float-type)
-                    (hu.dwim.rdbms.sqlite.cffi:sqlite-3-bind-double foreign-statement i (coerce binding-value 'double-float)))
-                   ((typep binding-type 'sql-string-type)
-                    (bind-string binding-value))
-                   ((typep binding-type 'sql-date-type)
-                    (bind-string (format-rfc3339-timestring nil binding-value :omit-time-part #t :omit-timezone-part #t)))
-                   ((typep binding-type 'sql-time-type)
-                    (bind-string (format-rfc3339-timestring nil binding-value :omit-date-part #t :omit-timezone-part #t)))
-                   ((typep binding-type 'sql-timestamp-type)
-                    (bind-string (format-rfc3339-timestring nil binding-value)))
-                   ((typep binding-type 'sql-binary-large-object-type)
-                    (bind-array binding-value))
-                   (t (error "Unknown type ~A" binding-type)))
+             (etypecase binding-type
+               (sql-boolean-type
+                (hu.dwim.rdbms.sqlite.cffi:sqlite-3-bind-int foreign-statement i (if binding-value 1 0)))
+               (sql-integer-type
+                (if (typep binding-value '(signed-byte 64))
+                    (hu.dwim.rdbms.sqlite.cffi:sqlite-3-bind-int-64 foreign-statement i binding-value)
+                    ;; TODO: bind as a blob
+                    (error "Integer ~A does not fit into (signed-byte 64)" binding-value)))
+               (sql-float-type
+                (hu.dwim.rdbms.sqlite.cffi:sqlite-3-bind-double foreign-statement i (coerce binding-value 'double-float)))
+               (sql-string-type
+                (bind-string binding-value))
+               (sql-date-type
+                (bind-string (format-rfc3339-timestring nil binding-value :omit-time-part #t :omit-timezone-part #t)))
+               (sql-time-type
+                (bind-string (format-rfc3339-timestring nil binding-value :omit-date-part #t :omit-timezone-part #t)))
+               (sql-timestamp-type
+                (bind-string (format-rfc3339-timestring nil binding-value :timezone local-time:+utc-zone+)))
+               (sql-binary-large-object-type
+                (bind-array binding-value)))
              nil "Cannot bind parameter $~A to ~A" i binding-value)))
     (iter (with column-count = (hu.dwim.rdbms.sqlite.cffi:sqlite-3-column-count foreign-statement))
           (for step = (hu.dwim.rdbms.sqlite.cffi:sqlite-3-step foreign-statement))

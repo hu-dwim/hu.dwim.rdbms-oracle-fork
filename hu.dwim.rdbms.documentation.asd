@@ -10,9 +10,7 @@
 
 (defsystem :hu.dwim.rdbms.documentation
   :class hu.dwim.documentation-system
-  :depends-on (:hu.dwim.rdbms.oracle.test
-               :hu.dwim.rdbms.postgresql.test
-               :hu.dwim.rdbms.sqlite.test
+  :depends-on (:hu.dwim.rdbms.all.test
                :hu.dwim.wui)
   :components ((:module "documentation"
                 :components ((:file "package")

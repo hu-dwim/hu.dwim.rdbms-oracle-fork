@@ -78,12 +78,14 @@
 
 (def reader-dialect-test test/syntax/sql-reader
   [select "bar" table]
-  "SELECT bar FROM table"
+  ((oracle "SELECT \"bar\" FROM \"table\"")
+   (t "SELECT bar FROM table"))
 
   (bind ((column-1 (sql-column-alias :table t :column 'col1 :alias "foo"))
          (column-2 (sql-column-alias :table t :column 'col2 :alias "bar")))
     [select (,column-1 ,column-2) table])
-  "SELECT t.col1 AS foo, t.col2 AS bar FROM table"
+  ((oracle "SELECT \"t\".\"col1\" AS \"foo\", \"t\".\"col2\" AS \"bar\" FROM \"table\"")
+   (t "SELECT t.col1 AS foo, t.col2 AS bar FROM table"))
 
   (bind ((columns (list (sql-column :name 'col1 :type (sql-integer-type))
                         (sql-column :name 'col2 :type (sql-character-varying-type))
@@ -94,7 +96,8 @@
                                       :type (sql-character-varying-type))
                         ,(sql-binding-variable :name 'dynamic-binding
                                                :type (sql-character-varying-type)))])
-  ((postgresql "INSERT INTO t (col1, col2, col3, col4) VALUES (42, $1::CHARACTER VARYING, $2::CHARACTER VARYING)")))
+  ((oracle "INSERT INTO \"t\" (\"col1\", \"col2\", \"col3\", \"col4\") VALUES (42, :1, :2)") ;; TODO THL and the type spec ars?
+   (postgresql "INSERT INTO t (col1, col2, col3, col4) VALUES (42, $1::CHARACTER VARYING, $2::CHARACTER VARYING)")))
 
 (def syntax-test test/syntax/expand-sql-ast/unquote/1 postgresql (&optional (n 3))
   ;; "SELECT a, b FROM t WHERE (t.b OR t.b OR t.b)"
@@ -123,7 +126,7 @@
            (funcall
             (compile
              nil
-             (expand-sql-ast-into-lambda-form
+             (expand-sql-ast-into-lambda-form-cached
               (sql-select :columns '(a b)
                           :tables '(t)
                           :where criteria)))))))))
@@ -168,20 +171,19 @@
            (funcall
             (compile
              nil
-             (expand-sql-ast-into-lambda-form
+             (expand-sql-ast-into-lambda-form-cached
               (sql-select :columns '(a b)
                           :tables '(t)
                           :where criteria)))))))))
 
 (def syntax-test test/syntax/expand-sql-ast/unquote/3 postgresql (&optional (n 3))
-  (bind ((criteria [or ,@(iter (for i :from 1 :to n)
-                               (rebind (i)
-                                 (collect [= a
+  (bind ((criteria [or ,@(loop for i from 1 to n
+                               collect [= a
                                              (+ b
                                                 ,(sql-binding-variable
                                                   :type (sql-integer-type)
                                                   :name (format-symbol (find-package :hu.dwim.rdbms.test) "VAR-~A" i))
-                                                ,i)])))])
+                                                ,i)])])
          (extra-columns '(c d)))
     (bind (((:values command binding-variables binding-types binding-values)
             (funcall [select (a b ,@extra-columns)
@@ -201,122 +203,142 @@
 
 (def ast-dialect-test test/syntax/format/identifier
   (sql-identifier :name "test_table")
-  "test_table"
+  ((oracle "\"test_table\"")
+   (t "test_table"))
 
   (sql-identifier :name 'test_table)
-  "test_table")
+  ((oracle "\"test_table\"")
+   (t "test_table")))
 
 (def ast-dialect-test test/syntax/format/create-table
   (sql-create-table :name "a"
                     :columns (list (sql-column :name "a"
                                                :type (sql-integer-type))))
-  ((oracle "CREATE TABLE a (a NUMBER)")
+  ((oracle "CREATE TABLE \"a\" (\"a\" NUMBER)")
    (t "CREATE TABLE a (a NUMERIC)"))
 
   (sql-create-table :temporary :drop
                     :name "a"
                     :columns (list (sql-column :name "a"
                                                :type (sql-integer-type))))
-  ((oracle "CREATE GLOBAL TEMPORARY TABLE a (a NUMBER) ON COMMIT DROP")
+  ((oracle "CREATE GLOBAL TEMPORARY TABLE \"a\" (\"a\" NUMBER) ON COMMIT DROP")
    (t "CREATE GLOBAL TEMPORARY TABLE a (a NUMERIC) ON COMMIT DROP")))
 
 (def ast-dialect-test test/syntax/format/alter-table
   (sql-alter-table :name "a"
                    :actions (list (sql-add-column-action :name "a"
                                                          :type (sql-integer-type))))
-  ((oracle "ALTER TABLE a ADD (a NUMBER)")
+  ((oracle "ALTER TABLE \"a\" ADD (\"a\" NUMBER)")
    (t "ALTER TABLE a ADD a NUMERIC"))
 
   (sql-alter-table :name "a"
                    :actions (list (sql-alter-column-type-action :name "a"
                                                                 :type (sql-integer-type))))
-  ((oracle "ALTER TABLE a ALTER COLUMN a TYPE NUMBER")
+  ((oracle "ALTER TABLE \"a\" MODIFY (\"a\" NUMBER)")
    (t "ALTER TABLE a ALTER COLUMN a TYPE NUMERIC"))
 
   (sql-alter-table :name "a"
                    :actions (list (sql-drop-column-action :name "a")))
-  "ALTER TABLE a DROP COLUMN a")
+  ((oracle "ALTER TABLE \"a\" DROP COLUMN \"a\"")
+   (t "ALTER TABLE a DROP COLUMN a")))
 
 (def ast-dialect-test test/syntax/format/drop-table
   (sql-drop-table :name "a")
-  "DROP TABLE a")
+  ((oracle "DROP TABLE \"a\"")
+   (t "DROP TABLE a")))
 
 (def ast-dialect-test test/syntax/format/create-index
   (sql-create-index :name "a"
                     :table-name "a"
                     :columns (list "a" "a"))
-  "CREATE INDEX a ON a (a, a)")
+  ((oracle "CREATE INDEX \"a\" ON \"a\" (\"a\", \"a\")")
+   (t "CREATE INDEX a ON a (a, a)")))
 
 (def ast-dialect-test test/syntax/format/drop-index
   (sql-drop-index :name "a")
-  "DROP INDEX a")
+  ((oracle "DROP INDEX \"a\"")
+   (t "DROP INDEX a")))
 
 (def ast-dialect-test test/syntax/format/insert
   (sql-insert :table "a"
               :columns (list "a")
               :values (list "a"))
-  "INSERT INTO a (a) VALUES ('a')"
+  ((oracle "INSERT INTO \"a\" (\"a\") VALUES ('a')")
+   (t "INSERT INTO a (a) VALUES ('a')"))
 
   (sql-insert :table (sql-identifier :name "a")
               :columns (list (sql-identifier :name "a"))
               :values (list "a"))
-  "INSERT INTO a (a) VALUES ('a')")
+  ((oracle "INSERT INTO \"a\" (\"a\") VALUES ('a')")
+   (t "INSERT INTO a (a) VALUES ('a')")))
 
 (def ast-dialect-test test/syntax/format/select
   (sql-select :columns (list "a")
               :tables (list "a"))
-  "SELECT a FROM a"
+  ((oracle "SELECT \"a\" FROM \"a\"")
+   (t "SELECT a FROM a"))
 
   (sql-select :columns (list (sql-all-columns))
               :tables (list "a"))
-  "SELECT * FROM a"
+  ((oracle "SELECT * FROM \"a\"")
+   (t "SELECT * FROM a"))
 
   (sql-select :columns (list "a")
               :tables (list "a")
               :where (sql-binary-operator :name '=
                                           :left (sql-identifier :name "a")
                                           :right (sql-identifier :name "b")))
-  "SELECT a FROM a WHERE (a = b)"
+  ((oracle "SELECT \"a\" FROM \"a\" WHERE (\"a\" = \"b\")")
+   (t "SELECT a FROM a WHERE (a = b)"))
 
   (sql-select :columns (list (sql-identifier :name "a"))
               :tables (list (sql-identifier :name "a")))
-  "SELECT a FROM a"
+  ((oracle "SELECT \"a\" FROM \"a\"")
+   (t "SELECT a FROM a"))
 
   (sql-select :columns (list (sql-column-alias :column "a" :table "b" :alias "c"))
               :tables (list (sql-table-alias :name "a" :alias "b")))
-  "SELECT b.a AS c FROM a b")
+  ((oracle "SELECT \"b\".\"a\" AS \"c\" FROM \"a\" \"b\"")
+   (t "SELECT b.a AS c FROM a b")))
 
 (def ast-dialect-test test/syntax/format/update
   (sql-update :table "a"
               :columns (list "a")
               :values (list "a"))
-  "UPDATE a SET a = 'a'"
+  ((oracle "UPDATE \"a\" SET \"a\" = 'a'")
+   (t "UPDATE a SET a = 'a'"))
 
   (sql-update :table (sql-identifier :name "a")
               :columns (list (sql-identifier :name "a"))
               :values (list "a"))
-  "UPDATE a SET a = 'a'")
+  ((oracle "UPDATE \"a\" SET \"a\" = 'a'")
+   (t "UPDATE a SET a = 'a'")))
 
 (def ast-dialect-test test/syntax/format/delete
   (sql-delete :table "a")
-  "DELETE from a"
+  ((oracle "DELETE from \"a\"")
+   (t "DELETE from a"))
 
   (sql-delete :table (make-instance 'sql-identifier :name "a"))
-  "DELETE from a")
+  ((oracle "DELETE from \"a\"")
+   (t "DELETE from a")))
 
 (def ast-dialect-test test/syntax/format/sequence
   (sql-create-sequence :name "a")
-  "CREATE SEQUENCE a"
+  ((oracle "CREATE SEQUENCE \"a\"")
+   (t "CREATE SEQUENCE a"))
 
   (sql-drop-sequence :name "a")
-  "DROP SEQUENCE a"
+  ((oracle "DROP SEQUENCE \"a\"")
+   (t "DROP SEQUENCE a"))
 
   (sql-select :columns (list (sql-sequence-nextval-column :name "a")))
-  ((oracle "SELECT a.nextval FROM dual ")
+  ((oracle "SELECT \"a\".nextval FROM dual ")
    (t "SELECT NEXTVAL('a')")))
 
 (def ast-dialect-test test/syntax/format/lock
   (sql-lock-table :table "a"
                   :mode :share
                   :wait #f)
-  "LOCK TABLE a IN SHARE MODE NOWAIT")
+  ((oracle "LOCK TABLE \"a\" IN SHARE MODE NOWAIT")
+   (t "LOCK TABLE a IN SHARE MODE NOWAIT")))

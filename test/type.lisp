@@ -8,25 +8,41 @@
 
 (def suite* (test/type :in test/backend))
 
+(def function type-test-insert (value type)
+  (make-instance 'sql-insert
+                 :table 'test_table
+                 :columns (list (make-instance 'sql-column
+                                               :type (compile-sexp-sql-type type)
+                                               :name 'a))
+                 :values (list (sql-literal :value value
+                                            :type (compile-sexp-sql-type type)))))
+
 (def definer type-test (name type &body values)
-  `(def test ,name ()
-     (with-transaction
-       ;; the first , is unquote relative to the sql syntax, the second is relative to `
-       ;; TODO [create table test_table ((a ,,sql-type))] should just work fine...
-       (unwind-protect
-         (progn
-           (execute-ddl [create table test_table ((a ,(compile-sexp-sql-type ',type)))])
-           ,@(iter (for (comparator value expected) :in values)
-                   (unless expected
-                     (setf expected value))
-                   (collect `(progn
-                               (execute [insert test_table (a) (,(sql-literal :value ,value :type (compile-sexp-sql-type ',type)))])
-                               (is (funcall ',comparator
-                                            (first-elt (first-elt (execute [select * test_table] :result-type 'list)))
-                                            ,expected))
-                               (execute [delete test_table])))))
-         (ignore-errors
-           (execute-ddl [drop table test_table]))))))
+  (flet ((make-inserter-form (value type)
+           `(execute (type-test-insert ,value ',type))))
+    `(def test ,name ()
+       (with-transaction
+         ;; the first , is unquote relative to the sql syntax, the second is relative to `
+         ;; TODO [create table test_table ((a ,,sql-type))] should just work fine...
+         (unwind-protect
+              (progn
+                (execute-ddl [create table test_table ((a ,(compile-sexp-sql-type ',type)))])
+                ,@(iter (for entry :in values)
+                        (case (first entry)
+                          (signals
+                           (bind (((condition-type value) (rest entry)))
+                             (declare (ignore x))
+                             (collect `(signals ,condition-type ,(make-inserter-form value type)))))
+                          (otherwise
+                           (bind (((comparator value &optional (expected value)) entry))
+                             (collect `(progn
+                                         ,(make-inserter-form value type)
+                                         (is (funcall ',comparator
+                                                      (first-elt (first-elt (execute [select * test_table] :result-type 'list)))
+                                                      ,expected))
+                                         (execute [delete test_table]))))))))
+           (ignore-errors
+             (execute-ddl [drop table test_table])))))))
 
 (def definer simple-type-test (name type &body values)
   `(def type-test ,name ,type
@@ -97,7 +113,7 @@
   12345678901234567890123456789012345678
   -12345678901234567890123456789012345678)
 
-(def simple-type-test test/type/float float
+(def simple-type-test test/type/float (float 32)
   (:null :null)
   (nil :null)
   0.0
@@ -141,7 +157,8 @@
   (local-time:timestamp= (local-time:parse-datestring "1000-01-01"))
   (local-time:timestamp= (local-time:parse-datestring "0001-01-01"))
   (local-time:timestamp= (local-time:parse-datestring "2000-01-01"))
-  (local-time:timestamp= (local-time:parse-datestring "3000-01-01")))
+  (local-time:timestamp= (local-time:parse-datestring "3000-01-01"))
+  (signals error (local-time:parse-timestring "2000-01-01T01:01:01Z")))
 
 (def type-test test/type/time time
   (eq :null :null)
@@ -149,12 +166,14 @@
   ;; TODO (signals 'error (local-time:parse-timestring "06:06:06+02:00"))
   (local-time:timestamp= (local-time:parse-timestring "06:06:06Z"))
   (local-time:timestamp= (local-time:parse-timestring "00:00:00Z"))
-  (local-time:timestamp= (local-time:parse-timestring "23:59:59Z")))
+  (local-time:timestamp= (local-time:parse-timestring "23:59:59Z"))
+  (signals error (local-time:parse-timestring "2100-01-01T01:01:01Z")))
 
 (def type-test test/type/timestamp (timestamp #f)
   (eq :null :null)
   (eq nil :null)
-  (local-time:timestamp= (local-time:parse-timestring "2006-06-06T06:06:06Z")))
+  (local-time:timestamp= (local-time:parse-timestring "2006-06-06T06:06:06Z"))
+  (local-time:timestamp= (local-time:parse-timestring "2006-06-06T06:06:06+02:00")))
 
 ;; TODO local-time:timestamp has no timezone information anymore... if we want to really test this here, then we need to introduce a type representing a tuple of (timestamp, timezone)
 (def type-test test/type/timestamp-tz (timestamp #t)

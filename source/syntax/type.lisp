@@ -93,13 +93,15 @@
    (format-string "TIME")))
 
 (def syntax-node sql-timestamp-type (sql-simple-type)
-  ((with-timezone
-     #t
-     :type boolean))
+  ()
   (:format-sql-syntax-node
-   (if with-timezone
-       (format-string "TIMESTAMP WITH TIME ZONE")
-       (format-string "TIMESTAMP"))))
+   (format-string "TIMESTAMP")))
+
+;; NOTE: we don't inherit from sql-timestamp-type because these types need special attention and there's little shared behavior
+(def syntax-node sql-timestamp-with-timezone-type (sql-simple-type)
+  ()
+  (:format-sql-syntax-node
+   (format-string "TIMESTAMP WITH TIME ZONE")))
 
 (def syntax-node sql-interval-type (sql-simple-type)
   ()

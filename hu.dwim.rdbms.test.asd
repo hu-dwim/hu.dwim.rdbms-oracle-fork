@@ -9,7 +9,7 @@
 (in-package :hu.dwim.asdf)
 
 (defsystem :hu.dwim.rdbms.test
-  :class hu.dwim.test-system
+  :class hu.dwim.system
   :depends-on (:hu.dwim.rdbms
                :hu.dwim.stefil+hu.dwim.def+swank)
   :components ((:module "test"

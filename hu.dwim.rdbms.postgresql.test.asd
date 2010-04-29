@@ -11,6 +11,7 @@
 (defsystem :hu.dwim.rdbms.postgresql.test
   :class hu.dwim.test-system
   :package-name :hu.dwim.rdbms.test
+  :test-name "TEST/POSTGRESQL"
   :depends-on (:hu.dwim.rdbms.postgresql
                :hu.dwim.rdbms.test)
   :components ((:module "test"

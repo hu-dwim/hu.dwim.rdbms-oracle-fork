@@ -9,12 +9,17 @@
 (def syntax-node sql-drop-table (sql-ddl-statement)
   ((name
     :type string)
+   (ignore-missing
+    #f
+    :type boolean)
    (cascade
     #f
     :type boolean))
   (:documentation "An SQL DROP TABLE statement.")
   (:format-sql-syntax-node
     (format-string "DROP TABLE ")
+    (when ignore-missing
+      (format-string "IF EXISTS "))
     (format-sql-identifier name)
     (when cascade
       (format-string " CASCADE"))))

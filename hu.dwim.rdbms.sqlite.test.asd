@@ -11,6 +11,7 @@
 (defsystem :hu.dwim.rdbms.sqlite.test
   :class hu.dwim.test-system
   :package-name :hu.dwim.rdbms.test
+  :test-name "TEST/SQLITE"
   :depends-on (:hu.dwim.rdbms.sqlite
                :hu.dwim.rdbms.test)
   :components ((:module "test"

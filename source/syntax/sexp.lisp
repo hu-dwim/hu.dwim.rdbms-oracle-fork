@@ -10,13 +10,15 @@
 
 ;; TODO support [select (count *) !(some lisp generating the from part)] syntax
 
-(def macro sql (body)
+(def macro sql (body &environment env)
   "Parse BODY as an sexp-sql sexp."
-  (expand-sql-ast-into-lambda-form
-   (compile-sexp-sql body)
-   :toplevel (and (consp body)
-                  (member (first body) '(select insert update delete create drop)
-                          :test #'sql-symbol-equal))))
+  (let ((*expand-cached* t))
+    (expand-sql-ast-into-lambda-form-cached
+     (compile-sexp-sql body)
+     :env env
+     :toplevel (and (consp body)
+                    (member (first body) '(select insert update delete create drop)
+                            :test #'sql-symbol-equal)))))
 
 (def condition* sql-compile-error (error)
   ((whole-form)
@@ -252,8 +254,9 @@
              ((sql-symbol-equal name "time")
               (make-instance 'sql-time-type))
              ((sql-symbol-equal name "timestamp")
-              (make-instance 'sql-timestamp-type :with-timezone (when type-args
-                                                                  (first type-args))))
+              (make-instance 'sql-timestamp-type))
+             ((sql-symbol-equal name "timestamp-with-timezone")
+              (make-instance 'sql-timestamp-with-timezone-type))
              ((sql-symbol-equal name "clob")
               (make-instance 'sql-character-large-object-type :size (when type-args
                                                                       (first type-args))))

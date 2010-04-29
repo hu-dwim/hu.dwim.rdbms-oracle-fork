@@ -48,8 +48,3 @@
                                            (:file "syntax" :depends-on ("format"))
                                            (:file "type" :depends-on ("syntax"))
                                            (:file "update" :depends-on ("syntax"))))))))
-
-(defmethod perform ((op test-op) (system (eql (find-system :hu.dwim.rdbms))))
-  (test-system :hu.dwim.rdbms.oracle)
-  (test-system :hu.dwim.rdbms.postgresql)
-  (test-system :hu.dwim.rdbms.sqlite))

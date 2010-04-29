@@ -184,11 +184,6 @@
     (handle-alloc (statement-handle-pointer statement) oci:+htype-stmt+)
     (stmt-prepare statement command)
     (rdbms.dribble "Statement is allocated")
-    (setf (select-p statement) (= (get-statement-attribute
-                                   statement
-                                   oci:+attr-stmt-type+
-                                   'oci:ub-2)
-                                  oci:+stmt-select+))
     statement))
 
 (def function free-prepared-statement (statement)
@@ -198,7 +193,7 @@
 
 (def function execute-prepared-statement (transaction statement binding-types binding-values visitor result-type
                                                &key (start-row 0) row-limit)
-
+  (setq start-row 0) ;; TODO THL why are start-row and row-limit here when it is handled by offset and limit in the sql query as oposed to fetching query results? probably old idea before handling that on the query side
   (let ((needs-scrollable-cursor-p (and start-row (> start-row 0))))
     ;; make bindings
     (setf (bindings-of statement) (make-bindings statement transaction binding-types binding-values))
@@ -226,7 +221,14 @@
                                 :row-count row-limit))
            (close-cursor cursor))))
       (t
-       nil))))
+       (when (and (insert-p statement) binding-types binding-values)
+         (loop
+            for type across binding-types
+            for value across binding-values
+            for binding in (bindings-of statement)
+            when (and (lobp type) (not (member value '(:null nil))))
+            do (upload-lob (cffi:mem-aref (data-pointer-of binding) :pointer) value)))
+       (values nil (get-row-count-attribute statement)))))) ;; TODO THL what should the first value be?
 
 ;;;;;;
 ;;; Binding
@@ -252,13 +254,22 @@
          (oci-type-code (typemap-external-type typemap))
          (converter (typemap-lisp-to-oci typemap))
          (bind-handle-pointer (cffi:foreign-alloc :pointer :initial-element null))
-         (indicator (cffi:foreign-alloc 'oci:sb-2 :initial-element (if (eq value :null) -1 0)))) 
+         (is-null (or (eql value :null)
+                      (and (cl:null value) (not (typep sql-type 'sql-boolean-type)))))
+         (indicator (cffi:foreign-alloc 'oci:sb-2 :initial-element (if is-null -1 0))))
     (multiple-value-bind (data-pointer data-size)
-        (if (eql value :null)
-            (values null 0)
+        (if is-null
+            (if (or (typep sql-type 'sql-character-large-object-type)
+                    (typep sql-type 'sql-binary-large-object-type))
+                (make-lob-locator t) ;; TODO THL why needed when indicator is -1?
+                (values null 0))
             (funcall converter value))
 
       (rdbms.dribble "Value ~S converted to ~A" value (dump-c-byte-array data-pointer data-size))
+
+      ;; TODO THL why **locator and not *locator? stmt-execute crashes:-{
+      (when (lobp sql-type)
+        (setq data-pointer (cffi:foreign-alloc :pointer :initial-element data-pointer)))
       
       (oci-call (oci:bind-by-pos statement-handle
                                  bind-handle-pointer
@@ -584,3 +595,5 @@
                            (cffi:inc-pointer buffer (* row-index size))
                            size))))
     (rdbms.debug "Fetched: ~S" it)))
+
+(def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?

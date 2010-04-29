@@ -60,6 +60,10 @@
            #:select-records
            #:select-count-*
 
+           #:safepoint
+           #:release-safepoint
+           #:rollback-to-safepoint
+
            #:make-cursor
            #:cursor-position
            #:column-count

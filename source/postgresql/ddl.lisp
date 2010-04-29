@@ -56,3 +56,8 @@
                        JOIN pg_class c3 ON (r.ev_class=c3.oid)
                   where c.relname='~A' and a.attname='~A' AND c3.relkind='v'"
            (string-downcase table) (string-downcase column))))
+
+(def method database-list-table-primary-constraints (name (database postgresql))
+  (remove-if-not (lambda (x) (search "pkey" x))
+                 (list-table-indices name)
+                 :key #'name-of))

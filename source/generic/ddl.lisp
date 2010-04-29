@@ -255,3 +255,8 @@
 
 (def generic database-list-table-indices (name database)
   (:documentation "Returns the list of table indices present in the database."))
+
+(def (function e) list-table-primary-constraints (name)
+  (database-list-table-primary-constraints name *database*))
+
+(def generic database-list-table-primary-constraints (name database))

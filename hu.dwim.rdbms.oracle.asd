@@ -22,9 +22,9 @@
                                            (:file "syntax" :depends-on ("database"))
                                            (:file "ddl" :depends-on ("database"))
                                            (:file "cffi-util" :depends-on ("database"))
-                                           (:file "conversion" :depends-on ("database"))
+                                           (:file "conversion" :depends-on ("cffi-util"))
                                            (:file "type" :depends-on ("database"))
-                                           (:file "backend" :depends-on ("database"))))))))
+                                           (:file "backend" :depends-on ("cffi-util"))))))))
 
 (defmethod perform :after ((op develop-op) (system (eql (find-system :hu.dwim.rdbms.oracle))))
   (let ((database-variable (read-from-string "hu.dwim.rdbms::*database*")))

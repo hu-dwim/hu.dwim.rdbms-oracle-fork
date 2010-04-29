@@ -34,8 +34,13 @@
 
 (def syntax-node sql-drop-index (sql-ddl-statement)
   ((name
-    :type string))
+    :type string)
+   (ignore-missing
+    #f
+    :type boolean))
   (:documentation "An SQL DROP INDEX statement.")
   (:format-sql-syntax-node
     (format-string "DROP INDEX ")
+    (when ignore-missing
+      (format-string "IF EXISTS "))
     (format-sql-identifier name)))

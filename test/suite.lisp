@@ -6,6 +6,6 @@
 
 (in-package :hu.dwim.rdbms.test)
 
-(def suite* (test :in root-suite))
+(def suite (test :in root-suite))
 
-(def suite* (test/backend :auto-call #f))
+(def suite (test/backend :auto-call #f))

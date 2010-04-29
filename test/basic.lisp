@@ -11,7 +11,8 @@
 (def test test/basic/connect ()
   (finishes
     (with-transaction
-      (execute "select 1"))))
+      (execute "CREATE GLOBAL TEMPORARY TABLE tmp (col CHAR)")
+      (execute "DROP TABLE tmp"))))
 
 (def test test/basic/create-table ()
   (finishes
@@ -147,7 +148,7 @@
          (is (length= 1 (execute
                          (compile
                           nil
-                          (expand-sql-ast-into-lambda-form
+                          (expand-sql-ast-into-lambda-form-cached
                            (sql-select :columns '(a)
                                        :tables '(test_table)
                                        :where (sql-= (sql-identifier :name 'a)
@@ -156,7 +157,7 @@
          (is (length= 1 (execute
                          (compile
                           nil
-                          (expand-sql-ast-into-lambda-form
+                          (expand-sql-ast-into-lambda-form-cached
                            (sql-select :columns '(a)
                                        :tables '(test_table)
                                        :where (sql-= (sql-identifier :name 'a)

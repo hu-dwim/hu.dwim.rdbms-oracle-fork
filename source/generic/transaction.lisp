@@ -283,7 +283,7 @@
   (:documentation "Extension point for with-transaction and rollback.")
 
   (:method :around (database transaction)
-    (rdbms.dribble "About to ROLLBACK transaction ~A" transaction)
+    (rdbms.debug "About to ROLLBACK transaction ~A" transaction)
     (when (begin-was-executed-p transaction)
       (call-next-method))
     (setf (state-of transaction) :rolled-back)
@@ -418,3 +418,14 @@
                        :when when
                        :action action)
       (push it (hooks-of transaction)))))
+
+(def (function e) savepoint (name)
+  (execute (format nil "SAVEPOINT ~a" name)))
+
+(def generic backend-release-savepoint (name database))
+
+(def (function e) release-savepoint (name)
+  (backend-release-savepoint name *database*))
+
+(def (function e) rollback-to-savepoint (name)
+  (execute (format nil "ROLLBACK TO SAVEPOINT ~a" name)))

@@ -54,6 +54,9 @@
                               value
                               (etypecase type
                                 (sql-timestamp-type
+                                  ;; PostgreSQL for timestamp columns sends back exactly the same value that was given at insert,
+                                  ;; so we are safe to send down UTC timestamps if we will also parse them back in UTC.
+                                  ;; random, somewhat related useful info: http://forums.mor.ph/forums/8/topics/189
                                   (local-time:format-rfc3339-timestring nil value :timezone local-time:+utc-zone+))
                                 (sql-date-type
                                   (unless (and (zerop (local-time:sec-of value))
@@ -140,3 +143,6 @@
     (rdbms.debug "Closing Postgresql connection ~A of transaction ~A in database ~A" it tr (database-of tr))
     (cl-postgres:close-database it)
     (setf (connection-of tr) nil)))
+
+(def method backend-release-savepoint (name (db postgresql))
+  (execute (format nil "RELEASE SAVEPOINT ~a" name)))

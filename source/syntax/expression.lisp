@@ -334,3 +334,12 @@
 (def function sql-count-* ()
   ;; TODO the sql-all-columns ctor macro is not yet defined here (select.lisp)
   (sql-count (make-instance 'sql-all-columns)))
+
+;;;;;;
+;;; false expression
+
+(def syntax-node sql-false-expression (sql-query-expression)
+  ()
+  (:format-sql-syntax-node
+   (format-sql-literal
+    (sql-literal :value #f :type (make-instance 'sql-boolean-type)))))

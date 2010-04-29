@@ -158,6 +158,9 @@
   (setf *sql-stream* (make-string-output-stream))
   (vector-push-extend form *command-elements*))
 
+;; bind to T if the right backend has not been selected, e.g. in the SQL macro
+(def special-variable *expand-cached* nil)
+
 ;; TODO: consider having an sql-quote node which should be checked instead of being an instance of sql-syntax-node here
 ;; (sql-unquote :form (sql-boolean-type))                          -> ,(sql-boolean-type)
 ;; (sql-unquote :form #<SQL-BOOLEAN-TYPE 1234>)                    -> ,#<SQL-BOOLEAN-TYPE 1234>
@@ -171,7 +174,9 @@
                    ((typep node 'sql-unquote)
                     (error "In ~A sql-unquote nodes cannot be nested without intermediate literal sql-syntax-nodes" unqoute-node))
                    ((typep node 'sql-syntax-node)
-                    (bind ((form (expand-sql-ast-into-lambda-form node :toplevel #f)))
+                    (bind ((form (if *expand-cached*
+                                     (expand-sql-ast-into-lambda-form-cached node :toplevel #f)
+                                     (expand-sql-ast-into-lambda-form node :toplevel #f))))
                       (etypecase form
                         (string
                          `(lambda ()
