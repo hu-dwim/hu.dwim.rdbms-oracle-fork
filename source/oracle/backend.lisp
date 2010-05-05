@@ -221,7 +221,10 @@
                                 :row-count row-limit))
            (close-cursor cursor))))
       (t
-       (when (and (insert-p statement) binding-types binding-values)
+       (when (and (or (insert-p statement)
+                      (update-p statement))
+                  binding-types
+                  binding-values)
          (loop
             for type across binding-types
             for value across binding-values

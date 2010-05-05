@@ -267,6 +267,65 @@
                     (format-char ","))
                   (format-sql-literal value database))))))))
 
+(def method format-sql-syntax-node ((self sql-update) (database oracle))
+  (with-slots (table columns values where) self
+    (flet ((make-lob (column)
+             (etypecase (type-of column)
+               (sql-character-large-object-type (make-instance 'sql-empty-clob))
+               (sql-binary-large-object-type (make-instance 'sql-empty-blob)))))
+      (let ((lob-columns nil)
+            (other-columns nil)
+            (lob-values nil)
+            (other-values nil))
+        (loop
+           for column in columns
+           for value in (when (slot-boundp self 'values) values)
+           do (if (lobp (and (typep column 'sql-column) (type-of column)))
+                  (progn
+                    (push column lob-columns)
+                    (push value lob-values))
+                  (progn
+                    (push column other-columns)
+                    (push value other-values))))
+        (format-string "UPDATE ")
+        (format-sql-identifier table database)
+        (format-string " SET ")
+        (loop
+           for column in (append other-columns lob-columns)
+           for value in (append other-values (mapcar #'make-lob lob-columns))
+           for n from 0
+           do (progn
+                (when (plusp n)
+                  (format-string ", "))
+                (format-sql-identifier column database)
+                (format-string " = ")
+                (format-sql-syntax-node value database)))
+        (format-sql-where where database)
+        (when (and lob-columns
+                   (remove-if (lambda (x) (member x '(:null nil))) lob-values))
+          (format-string " RETURNING ")
+          (loop
+             for n = (length lob-columns)
+             for column in lob-columns
+             for value in lob-values
+             for j from 1
+             unless (member value '(:null nil))
+             do (progn
+                  (when (<= 2 j n)
+                    (format-char ","))
+                  (format-sql-identifier column database)))
+          (format-string " INTO ")
+          (loop
+             for n = (length lob-columns)
+             for column in lob-columns
+             for value in lob-values
+             for j from 1
+             unless (member value '(:null nil))
+             do (progn
+                  (when (<= 2 j n)
+                    (format-char ","))
+                  (format-sql-literal value database))))))))
+
 ;;;;;;
 ;;; Expressions
 

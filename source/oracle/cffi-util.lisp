@@ -64,6 +64,10 @@
   (= oci:+stmt-insert+
      (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
 
+(def function update-p (prepared-statement)
+  (= oci:+stmt-update+
+     (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
+
 (def macro get-row-count-attribute (statement)
   `(get-statement-attribute ,statement oci:+attr-row-count+ 'oci:ub-4))
 
