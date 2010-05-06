@@ -189,7 +189,7 @@
                            clauses)
                  (t (error "Falling through estringcase: ~S" ,keyform)))))
     (estringcase data-type
-     ("NUMBER" (if (or (eq scale :null) (zerop scale))
+     ("NUMBER" (if (eql 0 scale)
                    (if precision
                        (case precision
                          (5 (sql-integer-type :bit-size 16)) ; KLUDGE

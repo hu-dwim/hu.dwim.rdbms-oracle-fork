@@ -1,4 +1,4 @@
-pristine:0000001842-40455d0653f27640b728d3b7a3c60be153495fa2559dc4ac17465e98f7e1ed23
+pristine:0000001842-b6e4311b72aed29edee7e48342cd8ec1ab334deb2a1b2780d0b796f1ee4ab32e
 Starting with inventory:
 0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
 [TAG 2008-11-27
@@ -804,3 +804,13 @@ tomas.hlavaty@knowledgetools.de**20100505114307
  Ignore-this: 237f7965ca168b1e5d08ebc92687c3f7
 ] 
 hash: 0000003087-c5809af8744eb371fc183819b98e1f30f1d623555a9fbba9cb56642fb20cde10
+[oracle: numeric types reflection fixed
+tomas.hlavaty@knowledgetools.de**20100506131128
+ Ignore-this: 706be704e1ea6da89291a5bc87f13a4e
+] 
+hash: 0000000936-426a6c5f425e581c44a3e7b717a7e78e2f816d51a306d20c380fc0e09f15a069
+[oracle: boolean in db uses Y/N instead T/F
+tomas.hlavaty@knowledgetools.de**20100506131213
+ Ignore-this: 4c733ee61636186da1901e4fceae1fb6
+] 
+hash: 0000000856-3a78b7115a70edc452f995ac0e1a7d38bc7a09404a29e05e87f75107e9dc9250

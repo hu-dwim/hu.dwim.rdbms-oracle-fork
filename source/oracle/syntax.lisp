@@ -17,10 +17,10 @@
   (format-string (princ-to-string (length *binding-types*))))
 
 (def method format-sql-literal ((value (eql nil)) (database oracle))
-  (format-string "'F'"))
+  (format-string "'N'"))
 
 (def method format-sql-literal ((value (eql t)) (database oracle))
-  (format-string "'T'"))
+  (format-string "'Y'"))
 
 (def method format-sql-literal ((literal sql-literal) (database oracle))
   (if (unquote-aware-format-sql-literal literal)
@@ -45,7 +45,7 @@
 
 (def method format-sql-syntax-node ((self sql-character-type) (database oracle))
   ;; signal an error when char(1) type is used
-  ;; because it would be interpreted as boolean and 'T' and 'F' would be mapped to t/nil
+  ;; because it would be interpreted as boolean and 'Y' and 'N' would be mapped to t/nil
   (with-slots (size) self
     (if (and size (= size 1))
         (error "CHAR(1) is reserved for booleans in Oracle mapping")
@@ -63,11 +63,14 @@
 (def method format-sql-syntax-node ((self sql-integer-type) (database oracle))
   (with-slots (bit-size) self
     (cond
-      ((cl:null bit-size) (format-string "NUMBER"))
-      ((<= bit-size 16) (format-string "NUMBER(5)"))
-      ((<= bit-size 32) (format-string "NUMBER(10)"))
-      ((<= bit-size 64) (format-string "NUMBER(19)"))
-      (t (format-string "NUMBER")))))
+      ((cl:null bit-size) (format-string "NUMBER(*,0)"))
+      ((<= bit-size 16) (format-string "NUMBER(5,0)"))
+      ((<= bit-size 32) (format-string "NUMBER(10,0)"))
+      ((<= bit-size 64) (format-string "NUMBER(19,0)"))
+      (t (format-string "NUMBER(*,0)")))))
+
+(def method format-sql-syntax-node ((self sql-numeric-type) (database oracle))
+  (format-string "NUMBER"))
 
 (def method format-sql-syntax-node ((self sql-character-varying-type) (database oracle))
   (with-slots (size) self

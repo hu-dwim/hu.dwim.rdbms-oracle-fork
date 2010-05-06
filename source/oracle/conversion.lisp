@@ -21,7 +21,7 @@
 ;;; Boolean conversions
 
 (def function boolean-to-char (value)
-  (foreign-oci-string-alloc (if (member value '(nil "FALSE") :test #'equal) "F" "T")
+  (foreign-oci-string-alloc (if (member value '(nil "FALSE") :test #'equal) "N" "Y")
                             :null-terminated-p #f))
 
 (def function boolean-from-char (ptr len)
@@ -30,8 +30,8 @@
     (assert (= (length str) 1))
     (let ((ch (char str 0)))
       (case ch
-        (#\T #t)
-        (#\F #f)
+        (#\Y #t)
+        (#\N #f)
         (t ch)))))                ; KLUDGE real char(1), not a boolean
 
 ;;;;;;
