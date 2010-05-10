@@ -1,4 +1,4 @@
-pristine:0000001842-b6e4311b72aed29edee7e48342cd8ec1ab334deb2a1b2780d0b796f1ee4ab32e
+pristine:0000001842-6e530e858ae21f443e8cffa9eaac93bdaa1f8018a98d551cafa3f32b67434e16
 Starting with inventory:
 0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
 [TAG 2008-11-27
@@ -814,3 +814,8 @@ tomas.hlavaty@knowledgetools.de**20100506131213
  Ignore-this: 4c733ee61636186da1901e4fceae1fb6
 ] 
 hash: 0000000856-3a78b7115a70edc452f995ac0e1a7d38bc7a09404a29e05e87f75107e9dc9250
+[oracle: booleans tested explicitly against Y/N in expressions
+tomas.hlavaty@knowledgetools.de**20100510160658
+ Ignore-this: c68a6224816a0f5fcd03649fe70d7309
+] 
+hash: 0000001660-a9ff758987dd6f5f03d5ca9da18ae99ad756b35dc52e57013f18d16456c4964d

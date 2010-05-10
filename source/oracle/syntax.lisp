@@ -422,10 +422,15 @@
        (format-string "SQRT(")
        (format-sql-syntax-node expression database)
        (format-string ")"))
-      ((equal "|/" name)
-       (format-string "SQRT(")
-       (format-sql-syntax-node expression database)
-       (format-string ")"))
+      ((equal "NOT" name)
+       (if (or (typep expression 'sql-column-alias)
+               (and (typep expression 'sql-literal)
+                    (typep (type-of expression) 'sql-boolean-type)))
+           (progn
+             (format-string "NOT('Y'=")
+             (format-sql-syntax-node expression database)
+             (format-string ")"))
+           (call-next-method)))
       (t (call-next-method)))))
 
 ;; TODO THL class for each operator for easier dispatch?
@@ -506,6 +511,24 @@
                      (format-string "=")
                      (format-sql-syntax-node right database))))))
        (format-string ")"))
+      (t (call-next-method)))))
+
+(def method format-sql-syntax-node ((x sql-n-ary-operator) (database oracle))
+  (with-slots (name expressions) x
+    (cond
+      ((member name '("AND" "OR") :test #'equal)
+       (format-char "(")
+       (format-separated-list expressions name database
+                              (lambda (x db)
+                                (if (or (typep x 'sql-column-alias)
+                                        (and (typep x 'sql-literal)
+                                             (typep (type-of x) 'sql-boolean-type)))
+                                    (progn
+                                      (format-string "('Y'=")
+                                      (format-sql-syntax-node x db)
+                                      (format-string ")"))
+                                    (format-sql-syntax-node x db))))
+       (format-char ")"))
       (t (call-next-method)))))
 
 (def method format-sql-syntax-node ((x sql-drop-column-action) (database oracle))
