@@ -166,14 +166,14 @@
 
 (def syntax-node sql-distinct-spec (sql-identifier)
   ((column-spec
-    :type (or number sql-column-alias*)))
+    :type (or integer sql-column-alias*)))
   (:format-sql-identifier
    (format-string "DISTINCT ")
    (format-sql-syntax-node column-spec)))
 
 (def syntax-node sql-sort-spec (sql-syntax-node)
   ((sort-key
-    :type (or number sql-column-alias*))
+    :type (or integer sql-column-alias*))
    (ordering
     :ascending
     :type (member :ascending :descending)))
