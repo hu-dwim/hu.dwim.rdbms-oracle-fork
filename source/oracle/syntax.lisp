@@ -70,7 +70,8 @@
       (t (format-string "NUMBER(*,0)")))))
 
 (def method format-sql-syntax-node ((self sql-numeric-type) (database oracle))
-  (format-string "NUMBER"))
+  (error "use more specific type with oracle backend") ;; TODO THL handle this better?
+  (format-string "NUMBER")) ;; oracle assumes NUMBER(*.0) :-{
 
 (def method format-sql-syntax-node ((self sql-character-varying-type) (database oracle))
   (with-slots (size) self

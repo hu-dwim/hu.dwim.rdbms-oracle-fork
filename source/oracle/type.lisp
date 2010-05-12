@@ -143,6 +143,7 @@
            ;; their external type is byte[22] (varnum)
            ;; NOTE: when rationals stored in a numeric column, their precision may be lost
            ;;       e.g. 1/3 -> 3333.../10000...
+    (error "use more specific type with oracle backend") ;; TODO THL handle this better?
            rational/varnum)
 
   (:method ((type sql-character-type))
