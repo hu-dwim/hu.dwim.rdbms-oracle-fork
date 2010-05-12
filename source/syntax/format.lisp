@@ -280,6 +280,8 @@
      (string-upcase name)
      (substitute #\Space #\- (string-upcase name))))
 
+(def generic make-syntax-node (name &rest args))
+
 (def definer syntax-node (name supers slots &rest options)
   (let ((effective-slots (delete-duplicates
                           (append (mapcan (lambda (super) (copy-list (get super :slot-names))) supers)
@@ -313,14 +315,23 @@
            ,@(remove-if (lambda (option)
                           (starts-with-subseq "format" (string-downcase (first option))))
                         options))
+         (def method print-object ((object ,name) stream)
+           (print-unreadable-object (object stream :type t :identity t)
+             (format stream "~s"
+                     (mapcar (lambda (x) (list x
+                                               (and (slot-boundp object x)
+                                                    (slot-value object x))))
+                             (get ',name :slot-names)))))
          (pushnew ',name *sql-syntax-node-names*)
          ,(awhen (find :format-sql-syntax-node options :key #'first)
                  (define-format-method 'format-sql-syntax-node (rest it)))
          ,(awhen (find :format-sql-identifier options :key #'first)
                  (define-format-method 'format-sql-identifier (rest it)))
          (pushnew ',name *sql-constructor-names*)
+         (def method make-syntax-node ((name (eql ',name)) &rest args)
+           (apply #'make-instance (cons name args)))
          (def macro ,name (&body args)
-           `(make-instance ',',name ,@args))
+           `(make-syntax-node ',',name ,@args))
          (find-class ',name)))))
 
 (def function format-comma-separated-list (nodes database &optional (format-fn 'format-sql-syntax-node))
