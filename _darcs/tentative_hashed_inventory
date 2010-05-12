@@ -1,0 +1,841 @@
+pristine:0000001842-cf73815608e2e4b1a4647a3badfdef9ac2e2b71b75cee5d17e6cfe4c2719ddfc
+Starting with inventory:
+0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
+[TAG 2008-11-27
+attila.lendvai@gmail.com**20081127150317
+ Ignore-this: cd18f65d67bb2ab24f7053abeb535586
+] 
+hash: 0000024027-b53a7274420a6fdf6c8633f21b676131198c3f37eeae6f7b81ddd095711a1437
+[use with-macro definer for with-transaction
+attila.lendvai@gmail.com**20090116115853
+ Ignore-this: bd4b7f2185a20d60a3f8e7f3069f0aca
+] 
+hash: 0000001523-fbd7d196cb51e4ddcd1b71fc114a779cc567ad6d1045a0bef2d2803e77d5aee5
+[depend on :cl-syntax-sugar-and-swank in the .asd
+attila.lendvai@gmail.com**20090116115939
+ Ignore-this: 7323526b27da579875750b929f0b2ba
+] 
+hash: 0000000253-b9970511185e0685ee53f0bd9e20cad2a7c6f4f36b7127fe0900bdbea08e7d4f
+[use deftype s bit
+attila.lendvai@gmail.com**20090120005233
+ Ignore-this: df9a44a32044b60971cda258a98345c0
+] 
+hash: 0000000923-118a6523b3bc7845362a86940770db560076e0a73a2c8d67225f04209c458267
+[add list-dependent-views
+tomi.borbely@gmail.com**20090507190118
+ Ignore-this: 1b000a509c4c3b4e73aa7c23f50e5c91
+] 
+hash: 0000001148-8722724d34fd072d5d55c20fc78217dad05de131428ea4a821c5ea9239c82439
+[Refactor for dwim.hu.
+levente.meszaros@gmail.com**20090814091634
+ Ignore-this: 59d14b759a6482d9460dccffe11e4521
+] 
+hash: 0000967037-0f72c582d03de090c4ae1d4a1f9b1d56bc0c1dd5b622491575bfa6ae1900df2d
+[Refactor to be able to test all backends at once.
+levente.meszaros@gmail.com**20090814145734
+ Ignore-this: 240629dd30ce26b70fc47d973eff3d31
+] 
+hash: 0000022120-1bd7ef433833bd8f1c6e648cad50448f23b629fea1651449c9bc57baaeef715a
+[Use def constructs all over the place.
+levente.meszaros@gmail.com**20090814161913
+ Ignore-this: ed9f8e25b13aa434910d38856e26d541
+] 
+hash: 0000090393-5a4df52348da3914263e3ee74e57c7d45bc77feeb53542e2a4ad4636c022e1a8
+[Fix dependency.
+levente.meszaros@gmail.com**20090814163739
+ Ignore-this: 5585a4aadb65ecee27fa71118c34f1d9
+] 
+hash: 0000000255-cae8c5238e26e6d6b649d708c0284e2aca81e9acf446d5e11a1330b01ba78010
+[Use hu.dwim.util and remove duplicates.
+levente.meszaros@gmail.com**20090823140819
+ Ignore-this: 787ed93d767eda1e8fa00ae11ffea57d
+] 
+hash: 0000006665-8fc3d7797d12b86f1b7db02429aeefa03e55263797bd442af8e5780cc8f86157
+[Get rid of the postmodern/postgresql duality
+levente.meszaros@gmail.com**20090823145444
+ Ignore-this: 7578f4fa6f5bd3868c9127c7253d48ad
+] 
+hash: 0000008608-7ed96edf53ae23d1099929342e4b4ffba6c1158ceee25e8872edcd13dd95c2e9
+[Use hu.dwim.rdbms.test database and username, password is engedjbe.
+levente.meszaros@gmail.com**20090823151637
+ Ignore-this: 4d7b14a0e4f28d10d3dca33d5e0f5b2c
+] 
+hash: 0000002145-6fd57a532210dda84a6750f2011e8c1712aaaf472ba0d32bb2008a67bcb9a3c1
+[Export *transaction*, got removed somehow.
+levente.meszaros@gmail.com**20090823154129
+ Ignore-this: c1c987b7d7f02773fdfebdcce35f3b1d
+] 
+hash: 0000000256-2959849cdb0eda4b1c50eb4dfffe055a1a7602f8986aa3de34866bb721d321cf
+[Rename CFFI packages.
+levente.meszaros@gmail.com**20090825112133
+ Ignore-this: c037f423f76107f5efa4b00ad099cfb5
+] 
+hash: 0000007575-fab24b271f91e757b79be52f243b08a95e4eb162b29704fdda824138c2c16d56
+[Added development support for implicit transactions.
+levente.meszaros@gmail.com**20090825134436
+ Ignore-this: c7f50234383e5a33ccb7695e5f0e8d71
+] 
+hash: 0000002923-420ed1f62687336990b19a476dab41493d40834f77041b8d0addb6b75dc1675f
+[In package hu.dwim.asdf
+levente.meszaros@gmail.com**20090908101855
+ Ignore-this: 92e51da7e6e3b1a35f94b246a7607565
+] 
+hash: 0000001398-18f1d88aa5270e4b73dcbf47879904185b28113cd9cb8ea5a24f4918abae780c
+[Better signal-non-destructive-alter-table-commands default.
+levente.meszaros@gmail.com**20090908102047
+ Ignore-this: c51a3f1035172415182ce852f462d452
+] 
+hash: 0000000351-9359d9823ec5168a10bfb773f4d11007932430a39643122c25f0b8159910f38a
+[Command line arguments.
+levente.meszaros@gmail.com**20090911152710
+ Ignore-this: 21b412c7913d352ee716b34055b12443
+] 
+hash: 0000000882-70d09c625aa431edd049fff656f151539efc6bb297edd110c167fc134bb3e297
+[String+
+levente.meszaros@gmail.com**20090911152717
+ Ignore-this: 1e4bd077a75cbddd8f2aee6d7f5587b0
+] 
+hash: 0000001598-9245be61fdffc130e06b3cfc179cb57cffa7f66dab3520afae165494385d178f
+[Rename.
+levente.meszaros@gmail.com**20090915115734
+ Ignore-this: a5cce0fc5ce07617785ef05c2aa4df0e
+] 
+hash: 0000000273-ab485206e90f5458d84f057c23236a71baf2a6f34dd7748c9fbf7a8af2634e22
+[fix: + is an illegal name in postgres names, turn it into _
+attila.lendvai@gmail.com**20090723154435
+ Ignore-this: aee832622eef5c63e2ef37419a16ca76
+] 
+hash: 0000000436-ff78384cd150113e7090fadd8ca8b31beffa78178a2b94a2eaf83e6f2a9631e6
+[postgres backend: package deadlock-detected-error into the cl-rdbms condition type
+attila.lendvai@gmail.com**20090723154532
+ Ignore-this: 41f77a8fd951401a68055831e87e1698
+] 
+hash: 0000000407-25d37c95dbc7d0c908753d9b86e2c6463eb7622bd94fd076729e8c98409c37f2
+[housekeeping
+attila.lendvai@gmail.com**20090811132429
+ Ignore-this: 97ef08f6edbe5795a4605825bda12788
+] 
+hash: 0000001893-874d7a74dc3727a0cf22bed786c2c9a7fecd416f0972911fd219b18418b9d224
+[merge
+attila.lendvai@gmail.com**20090922091629
+ Ignore-this: 36855bc492937a25a88b9e7d186958d7
+] 
+hash: 0000000441-6d91ffe0cf13564fa3cce51aa3bb50dc1dd779244cdd574501d0c233626cea54
+[Make it a constant.
+levente.meszaros@gmail.com**20090924155033
+ Ignore-this: 7f01fb02b19de86db5c14ded6a4f1bb
+] 
+hash: 0000000260-e7992bdb786aba41b4f06e2b63f434117f0f8ae37543dd02a6a3c2dcd815535e
+[only load oracle oci lib at first connect (UNTESTED)
+attila.lendvai@gmail.com**20090929140123
+ Ignore-this: 96c2d9b945f6950a9e1c8eadb2205b13
+] 
+hash: 0000001643-bfca1cf73fb7e5f8e9e06ad9f9b2215d59c474c6fec6c003dd75fc9adf0f5250
+[Follow logger
+levente.meszaros@gmail.com**20091009161636
+ Ignore-this: 55da3e547e7e7ad9e8e3badb2ee020fa
+] 
+hash: 0000009806-487985bc01bd6d7ee213e414040538a21d11c29eb54f0f5519c301bbf63958c4
+[Depend on cl-postgres+local-time.
+levente.meszaros@gmail.com**20091009161821
+ Ignore-this: a739cd7c7c2b67bd7b85d95a87e804fa
+] 
+hash: 0000000234-c4ea140268c4a7fcf77a7df5775dd4045b79b4b966f2fa567fb38aaeee8f249d
+[Fix some logger issues.
+levente.meszaros@gmail.com**20091009164848
+ Ignore-this: 9b98ea63c4cc2369f4b1a217e0253fb1
+] 
+hash: 0000000746-4e83d6e3df0154c42986cb35cd84b059b17b89ccbd39ca5af7e1a21f4cf09eac
+[Some work on documentation.
+levente.meszaros@gmail.com**20091020095836
+ Ignore-this: cbc8d177f4b6e565ae3d6fe0c9d7964e
+] 
+hash: 0000003377-2a9037b318b8e518c61bea68c7787f2fb655f8667130f283483c3879ef112a31
+[Documentation
+levente.meszaros@gmail.com**20091020122015
+ Ignore-this: 9e34814234c4141a90f22cc46b695296
+] 
+hash: 0000000603-b7f0d456050d75aa4a17d75e4463b4ff64f6778d2788bbf0c360f15415af33dc
+[Follow hu.dwim.common-lisp renaming.
+levente.meszaros@gmail.com**20091020140958
+ Ignore-this: 95a26f0db90ef4adf3ba79c2b5138a00
+] 
+hash: 0000000825-c6101421ce77dc4cf7e9bf024c837991cc55366b476a415d22fc3830b9286fa3
+[Added some pages to project documentation page.
+levente.meszaros@gmail.com**20091020192755
+ Ignore-this: 8e9dfc5ae9c168508cbe71d8ca7be251
+] 
+hash: 0000000926-6d085d8314b096f55b2dc30df15312a3b036b2513b4e717db8bfc6fb527a3f66
+[Export customization point.
+levente.meszaros@gmail.com**20091020220017
+ Ignore-this: de880872c604965db68db92781faa2c9
+] 
+hash: 0000000323-255da26b651ac1932433fc9a9b847ae4c6f7a8c6b019775fac3a656338f32c7e
+[Documentation.
+levente.meszaros@gmail.com**20091020220632
+ Ignore-this: 607ed8e0c4e75f6213f1ca0fa752c1ae
+] 
+hash: 0000001114-0bc6214d429218310b1fb787495911fbadf95a3663321dfb83186224c9adcc49
+[Wording.
+levente.meszaros@gmail.com**20091021154033
+ Ignore-this: c67e60aa7608e2426ae148719b7a2ddb
+] 
+hash: 0000000831-c0129846ab66f36fedbd0f9bd26fe69d821864a8c15c32b49e344f03ba411085
+[Documentation tuning.
+levente.meszaros@gmail.com**20091021161016
+ Ignore-this: 825ebff531ae51f51c18a6d0e62fac86
+] 
+hash: 0000000496-affaf88a9d42c4b06ac415731c1f9e0c5a7281a47defda5fa0e46b41360bd321
+[Bah, fix the documentation.
+levente.meszaros@gmail.com**20091022082546
+ Ignore-this: ca8dd99dcff7528963938184adf59ae3
+] 
+hash: 0000000873-4d24ee1e58ab77465694c23f7e19d17312779228b75fa3f018fd49e3805d7241
+[Some lame documentation strings.
+levente.meszaros@gmail.com**20091022082851
+ Ignore-this: 7d804213d667f3015347967335e8bbfe
+] 
+hash: 0000000948-2aa63f0e5ee3856bbe9f5db01a37705e26336863a8ab7b3e3d069833b33e11bb
+[retry connecting restart shows connection specification
+attila.lendvai@gmail.com**20091102081828
+ Ignore-this: 90aa2c2bff842d19d6904f01f3f8c54c
+] 
+hash: 0000000358-29110ec2fe94ae18bf89a51f015aea666dd33a19dea645eaa4e12581b502b84f
+[Don't log SQL statements by default, that was a mistake.
+levente.meszaros@gmail.com**20091104143158
+ Ignore-this: d85f1884f0938984fa0e79ecab6aebf6
+] 
+hash: 0000000366-2ac850d79a698706f82ef45e0ca9366df7ddb4bf2edc1571459d276af3741b0e
+[renames around schema change conditions, no semantic changes
+attila.lendvai@gmail.com**20091110215027
+ Ignore-this: 5ad23655a977fdedf507394645918e34
+] 
+hash: 0000006066-f398a6cefa7dbb0293eea8337a0fd0d1a694c17ebe894beddb1e42c3d99cb186
+[drop some already exported stuff from package.lisp
+attila.lendvai@gmail.com**20091110215543
+ Ignore-this: c0eb36703567ad1bf6e523eb961d1794
+] 
+hash: 0000000345-dc2327f5d66742b15644094d6a46936c7d4bd8a763ab01f5efe40ab7ad35f147
+[alter-column-type schema change is always considered destructive, not only when the db signals an error
+attila.lendvai@gmail.com**20091110223221
+ Ignore-this: 3d55140e54235bbff3278f0267658fd6
+] 
+hash: 0000005789-23cbfc9f6a2e4881ffbc29053e2ed8dbe2fec5cc5459f2a2cf30e035ed9ca3ec
+[Follow logger changes with start/stop sql recording.
+levente.meszaros@gmail.com**20091112224359
+ Ignore-this: 2182aa070f2af3d805871d13e34a1dc9
+] 
+hash: 0000000396-c1d87f84941846f4fabf69c688a483ff98a5a042f7dcf3567d7e20984af9aec4
+[Explicitly ignore short command line option.
+levente.meszaros@gmail.com**20091117134902
+ Ignore-this: 79390fa66a3ff9b7dec5b8eae0caab24
+] 
+hash: 0000000620-410a39bed4a155a99f144ed5baeca1090612084d4fd2940454024c10e2ffa79d
+[Use icons so swicth to tab pages.
+levente.meszaros@gmail.com**20091117152657
+ Ignore-this: 82fb318ab8d3a13152b880d001ed4e15
+] 
+hash: 0000001075-33383fa80425aa86ef7b7ee2d873f2d221ab40373d5c55f2969199b21c622c05
+[old tag: 2009-11-19
+attila.lendvai@gmail.com**20091119005506
+ Ignore-this: b0f61a7793769c9d3ed63f29dce67c7c
+] 
+hash: 0000005937-f6b32a38f60b6fbdd2130d9489a142c76015c0c5366d753526c84b70ed252ad1
+[follow (def package ...) refactor
+attila.lendvai@gmail.com**20091119224739
+ Ignore-this: 869ebac19bebbc09aaa2cd5a5df96a32
+] 
+hash: 0000005397-596440c4b10769cd4ebcc4e2919fe3f353521afc8532f748015c8ecb1583a3a7
+[Simplify asd files.
+levente.meszaros@gmail.com**20091201125402
+ Ignore-this: 7b2dab84f8445d515b3cb9223194e082
+] 
+hash: 0000003183-a092f4dd3f39505e9d0c34933bb836293692efd5e6c3a944d98f415588f40b50
+[Whitespace.
+levente.meszaros@gmail.com**20091201190400
+ Ignore-this: 5913744f7e47d0ae73b1eca6f48669f7
+] 
+hash: 0000000206-4079f900eb4e163c4edf7a537ddfa176e1a7f5af788fe1881a7cc0242ad389e0
+[don't use cl:continue for schema changes, use our own 'continue-with-schema-change
+attila.lendvai@gmail.com**20091207120321
+ Ignore-this: a94100e5e586478c93ed11f91e84fef5
+] 
+hash: 0000002353-ef957d7d693c9267d9c7e312e8c015d035e3229cf20d00670d3095423f6d2dee
+[renamed to with-confirmed-destructive-schema-changes
+attila.lendvai@gmail.com**20091207120546
+ Ignore-this: c7b7c0b866c2df23a399545a9b259037
+] 
+hash: 0000000382-180ccc5c1d00156b8ff9b10e84e16a0dfd37f7d0a5b006412d93c152d6f0ba65
+[added an exported continue-with-schema-change function
+attila.lendvai@gmail.com**20091207121710
+ Ignore-this: da02d84e61e1f75ffc45800f1aa0b265
+] 
+hash: 0000000660-5cb51f5c5fd2e5656d6bb547c977847b73a075be55d836cbee0aea4d9a34a19a
+[minimal cleanup in oracle code, follow local-time a bit (still broken)
+attila.lendvai@gmail.com**20091208135527
+ Ignore-this: 3286a76853ca43de6f6ea917489b79e5
+] 
+hash: 0000005898-fe58ea26a7e15f3b9bfef42cb43cf0fde54ef88f1d4c0984c2b8d943ac9269ad
+[housekeeping tests
+attila.lendvai@gmail.com**20091211144247
+ Ignore-this: 50a2307d174d15b73238a69401661590
+] 
+hash: 0000003726-d41f3e527d92c6dd73be562d932eb43c20cbb769fe7fdfcec41343ca5a3960bf
+[use standard logging facitilies for the sql log
+attila.lendvai@gmail.com**20091211144325
+ Ignore-this: e767efeff6b4a1ad9e580a057c4eb40b
+] 
+hash: 0000002769-183fc38c31fb93f4d6d80e353a23475ab66375b51967575445ec01a19b38c477
+[typo in log
+attila.lendvai@gmail.com**20091214152030
+ Ignore-this: 1fb3378c0d9c45e52a69609b3b61230e
+] 
+hash: 0000000355-707c6871dab87f603263e4a5ace731fe3adf22c9ad1f3ef0a7a2da8c76583426
+[try to load libsqlite3.so.0 first and then libsqlite3.so
+attila.lendvai@gmail.com**20091218104332
+ Ignore-this: 6583c310dc3d48de4ed051f97b45cfce
+] 
+hash: 0000000262-5dfbad41bdd7e24a07e2774ced9bc6dc78fbde70a3991b95a0b72d5aa605bcfe
+[TODO comments
+attila.lendvai@gmail.com**20091222112121
+ Ignore-this: fb29bf1d42db4e135ae86282df634c8
+] 
+hash: 0000000602-49b091527665aa0188fc1777e88cdc31ee728f6db49f4ac7c39ef6337fd4c61c
+[merge
+attila.lendvai@gmail.com**20091222112339
+ Ignore-this: eac5d1cd02288d1ffe94adc529f13905
+] 
+hash: 0000000331-0d912b9189fcf1307b327e5e9abca497f2416d9d3e7345cde7d91e92d053b1f4
+[stefil suites :in nil is not the way to do it
+attila.lendvai@gmail.com**20091228220639
+ Ignore-this: 292130740f7a027bb2463a01a3ba199b
+] 
+hash: 0000000234-dd7eaa2da6fb137e7381bf48bdf4bf0a794a264f57c7dd3ba3ac679e7f88eb61
+[Log SQL bindings and SQL statement separately to make following them easier during debugging.
+levente.meszaros@gmail.com**20091229204922
+ Ignore-this: caa87766fd6bb906441a67323131f1
+] 
+hash: 0000001048-6e184c1e96161127be7425aac030e250cbeb26936e8c772f9f5d3b02fd9248f3
+[Added default postgresql server port constant.
+levente.meszaros@gmail.com**20091230165046
+ Ignore-this: 2cabf2e038b008f11807da3f717cbdd6
+] 
+hash: 0000000616-3ca9fcf8d138c2278d5053f1b284466be77e00b00aad935c860b2c3e9bbe2e5e
+[separate binding and statement logging is wrong due to threading
+attila.lendvai@gmail.com**20100112071529
+ Ignore-this: 9b3a6560fa744836f315722f32b2b601
+] 
+hash: 0000001046-4bea6498f86d663cbc8cd10acd99a41a6083f0021adb4d586fa39a44705d6c65
+[Use encode-timestamp.
+levente.meszaros@gmail.com**20100112151550
+ Ignore-this: a08f00c24356ddb28b3e373443f5bc
+] 
+hash: 0000003468-14f34e8b979326527fc92abbca7673c16482f819f1ca727d81fcaca77187bd88
+[Mark as not-yet-implemented.
+levente.meszaros@gmail.com**20100112151906
+ Ignore-this: c5ab66432157d54e2d963f876f8694f3
+] 
+hash: 0000001097-5bd96d7a078495ff6acbf06a894765eae397dce5a6bbcb3dd58b04d417d6480d
+[Follow cffi with oracle backend
+levente.meszaros@gmail.com**20100112153813
+ Ignore-this: b303af6236daa62f6c604c232cc13018
+] 
+hash: 0000000367-12520abd4db7d66fe1ff97c0c75bd190bd8f1cb5ed17c899fe650d4580504e69
+[Fix type tests when the test table did not exist.
+levente.meszaros@gmail.com**20100115124751
+ Ignore-this: 2670bdce6036e263456eccda0adde177
+] 
+hash: 0000001679-09806492e0b18e601af3c8c878c47cceb439bcc8196385db9013076ef0579ac6
+[Fix some generic method source formatting.
+levente.meszaros@gmail.com**20100115140956
+ Ignore-this: 3010230c9736d849ca776ea82a60e7c4
+] 
+hash: 0000004919-0c5ffa514946fa5945d89ae4f2101a3511996ebced216a2dce5a76598c88aa9d
+[Fix logging SQL statements when there's no binding at all.
+levente.meszaros@gmail.com**20100115145105
+ Ignore-this: da5a066c324115cedecf4ea62aaaeb1c
+] 
+hash: 0000002647-2d8b208bcb44e82d0956969ad2965f197958ed457a5a2d5fdaaf4638a166c590
+[Added :null :null tests.
+levente.meszaros@gmail.com**20100115150625
+ Ignore-this: d4ef11911e56c50bd5ed2a2f5c939416
+] 
+hash: 0000000724-0509fb7cfcd719f3f3f403c44e1ac4243690b82d8ecd56081ffb6f9b3f46ecef
+[Separate ratio test.
+levente.meszaros@gmail.com**20100115150638
+ Ignore-this: 94c98f15b73245fff01d568f141d142a
+] 
+hash: 0000000688-45cea074edfbcd3e5f71c9766036bd9848ffe6e490722bc6d38059ea393f9f50
+[Fixed execute-ddl running with *implicit-transaction-default-terminal-action*.
+levente.meszaros@gmail.com**20100115153449
+ Ignore-this: f9d326f735ebd257e0e39611de4ac450
+ 
+ This was using ROLLBACK as a default terminal action.
+ Added a keyword to change that and make COMMIT the default for execute-ddl.
+] 
+hash: 0000001621-f942ab8d0bc02dc24d127668a672e47708cddc0d74f0571215a9488b809638f2
+[Revived test/basic tests.
+levente.meszaros@gmail.com**20100115154016
+ Ignore-this: ea14985287d473fd07e4f75b9426129b
+] 
+hash: 0000011400-573316be405ef7b1076406d4bd2b3132ca47cff4291ffc064f5c3346f5bb4ba8
+[Revive all tests, works for postgresql.
+levente.meszaros@gmail.com**20100115165525
+ Ignore-this: 7b8f3ded19d05ac4d572fdbcfa7ccdaf
+] 
+hash: 0000005698-bac7a553adc69878334002e58a41910c04f162470d3ef8668389dc95a2262d12
+[rename restart to drop column
+attila.lendvai@gmail.com**20100117150839
+ Ignore-this: fde6196ae9af23a0a446df5cf8992ca3
+] 
+hash: 0000000543-b998c9f929bbf86968ca74b3d12a27dab0c504cffd83fc1e839a3d43c0184cc5
+[with-simple-restart -> restart-case
+attila.lendvai@gmail.com**20100117150903
+ Ignore-this: eaf8130e10a1f99dc88f0bd9e2a60e82
+] 
+hash: 0000001576-f4fc4c19935895e94c910a9f8dc9de529b4772ff98c3ba627672bc79ede96757
+[drop-table restart for update-table
+attila.lendvai@gmail.com**20100117151249
+ Ignore-this: 788ab180355238ac2380811da2694cb1
+] 
+hash: 0000000696-868be35235e878a51447f013fea52afc7268024890a3777cfe9fa11a599b1848
+[export model support: make drop-column restart available in a bigger scope, relocate with-transaction
+attila.lendvai@gmail.com**20100208102120
+ Ignore-this: 58eabad5662025d581a36d14f0bb99cf
+] 
+hash: 0000002810-f032de4f9925ee2473491a44cd71ab741a0bc6bf2b458f1266892bea1b31f92f
+[Documentation.
+levente.meszaros@gmail.com**20100225160356
+ Ignore-this: 189a644e8d3358ea9ec8408703991671
+] 
+hash: 0000000759-d32398904d52b580f5e50a0d2886adc3aed5e645a7d00a57c6911498160aadf1
+[housekeeping
+attila.lendvai@gmail.com**20100301121249
+ Ignore-this: e91e08c9072986a21f599878b189a883
+] 
+hash: 0000000618-0a1d096f4d9007cb5b4ab4d8e62dab19a34977f303793a425f4a6c2d1002956e
+[Package
+levente.meszaros@gmail.com**20100308133104
+ Ignore-this: 1bb3884055cd63f76218bf832ebab3f8
+] 
+hash: 0000000470-254b9e721073bfa5be32eda1a33b450478e43b3bad0b5a644cdd721b2b3ad53b
+[Fix keyword argument.
+levente.meszaros@gmail.com**20100309115839
+ Ignore-this: 50a483b6759fc7661ba367ad2bf87f61
+] 
+hash: 0000000310-1ad647fc78277bfff2f289cdf4d2354e081f2cd2294be765367930486ea86598
+[Use rdbms.debug, similar to begin and commit.
+levente.meszaros@gmail.com**20100309121610
+ Ignore-this: e4f7293482a512af7c9cb3fc2b8ea334
+] 
+hash: 0000000315-fda8301bf89ed2c1d752a8f3da369cbcd93be691fc87cc5629bbdfb70fd6dbd1
+[:hu.dwim.rdbms.test is not a test-system in itself, added :hu.dwim.rdbms.all and its test system :hu.dwim.rdbms.all.test
+levente.meszaros@gmail.com**20100309113030
+ Ignore-this: b7f23a124698b381557751f009ca4bb9
+] 
+hash: 0000001542-898d5b8e5624dcd19bcf0e137973ad34bd7dc738b305a796c939f1cf5c6d0795
+[:hu.dwim.rdbms backend specific test systems can be tested on their own (test-system :hu.dwim.rdbms.postgresql), or all at once using (test-system :hu.dwim.rdbms.all)
+levente.meszaros@gmail.com**20100309121248
+ Ignore-this: 7b5cc612abb5f4452235a4f0154c4dad
+] 
+hash: 0000000678-bfc868ac1c1235533edb53af9a121ce836e8be5d53823c754ca41fa728df4364
+[Depend on all tests.
+levente.meszaros@gmail.com**20100311120321
+ Ignore-this: e25cc4e64b4ad854b968237d25eb00cb
+] 
+hash: 0000000328-202abebd296c45189cfe5a6d5b4b47c7e1987518c195078ab096fcb9a68ea556
+[asd file dependencies fix
+tomas.hlavaty@knowledgetools.de**20100316151028
+ Ignore-this: d172756c469320dcf530f62c2c2c6f65
+] 
+hash: 0000000561-f36622bb6d8c1ba89a839aa6488671bafd81c3f6f268f60aea19ab201dcfcf40
+[use portable sql statement to test connection
+tomas.hlavaty@knowledgetools.de**20100317132631
+ Ignore-this: eb545a9812d6760714fcec790b384d9
+] 
+hash: 0000000300-bac6b3f8c47cd346705d10b86d12ea9f301cf13c8365294f3ffc4580c6be1dda
+[allegro gave error :UNSIGNED-LONG-LONG fell through a ECASE form
+tomas.hlavaty@knowledgetools.de**20100317132957
+ Ignore-this: f2b361ed7f58787bf31a38fdb3fc3c9c
+] 
+hash: 0000002781-a0e3d546b5052bb5f34c87bc06b27d108385660362aacf3e1aa2e12604b772c5
+[expand-sql-ast-into-lambda-form recompilation for different backends
+tomas.hlavaty@knowledgetools.de**20100318124951
+ Ignore-this: 5da990d3e53ccad46264894e569068d7
+] 
+hash: 0000003205-beb8a4cd4ed1500d3cdc06d6b6bdd8eadf3655b83bcb2ca787624a08d9b63ce1
+[with-cache args fixed
+tomas.hlavaty@knowledgetools.de**20100318133318
+ Ignore-this: 7c1d30353614e0c4834b41dbb35dfc9f
+] 
+hash: 0000000278-494c3587d0f132d1a699fd81787960d555b9a01dcd8d60a84c1c0deb21a07187
+[Oracle hack: oci-string-to-lisp workaround (squash)
+david.lichteblau@knowledgetools.de**20100318133440
+ Ignore-this: 4ec02fd76ae09ee4fbd412399ed111a7
+] 
+hash: 0000000818-6bd1ec98c017df168c17dcc65c25ed588ec0c09807eb03f59b93a383ce0f67e6
+[with-cache args fixed (second service)
+tomas.hlavaty@knowledgetools.de**20100318140338
+ Ignore-this: edea98d4d71446aeac24d79ef5f2cc1f
+] 
+hash: 0000000582-4cc0c122df55f30b1c423681005c11dd56a96c01f668187b22ec99dd68318125
+[sql macro transformation uses current lexical vars
+tomas.hlavaty@knowledgetools.de**20100318163153
+ Ignore-this: 8faa3e3a1c31a20a13ec044d9d8821d6
+] 
+hash: 0000001510-aa82c7fdea9c4db3c49c482a57936d1bb5ef1b1956eee62cb87e92963ea1daa6
+[added oracle specific cases in tests
+tomas.hlavaty@knowledgetools.de**20100319125825
+ Ignore-this: 79093b7454ff238ad7571c9001d9f1f8
+] 
+hash: 0000004106-490b9ebd702522b7505fc4b73f4a96c8f9ea8ec128227ba19a8bcadbac472d7c
+[test fix: test/type/float float => test/type/float (float 32)
+tomas.hlavaty@knowledgetools.de**20100319130354
+ Ignore-this: 778d640ed9e3c789b5c59a2047491c30
+] 
+hash: 0000000280-31e32083aa0266e540e61a5c49e7cb857a2f90fcfd5e3192fdfc5b227b3ed7ca
+[Oracle fix: implement database-list-views (for upstream)
+david.lichteblau@knowledgetools.de**20100319155251
+ Ignore-this: b1962faae243bae4f77511333dd97d8
+] 
+hash: 0000000329-625031f223a21d13c657c9e4093a327ec02969d36950beb84f86cffceeeb1843
+[oracle specific drop view|table|index|sequence (if exists) added
+tomas.hlavaty@knowledgetools.de**20100319155527
+ Ignore-this: f1b965606bf1ff632b77fc61e4c80e78
+] 
+hash: 0000001901-d7acb8df9539a5ce9c9a1b9c03996bc4a58c7df8922b59d6c38d81316241bd85
+[oracle port "drop if exists"
+tomas.hlavaty@knowledgetools.de**20100322104019
+ Ignore-this: 9a08772fecbecf5447b74d02ce1a78e
+] 
+hash: 0000000762-1359434c57a78ff4b2846c7ba432aba022b05b0aaf6f03700d8336325697dbf9
+[nil handling as :null except for sql-boolean-type
+tomas.hlavaty@knowledgetools.de**20100322115736
+ Ignore-this: e100071a2bb107e09acb72541de57af4
+] 
+hash: 0000000332-7ccfa33b8edda78a99745270ae3ca05bc5bcffa80191caec9d4064e556c6b3e3
+[oracle: return no of rows changed for not-select queries
+tomas.hlavaty@knowledgetools.de**20100325102446
+ Ignore-this: 57da013874ab7c3ef6e778f936c4f8a1
+] 
+hash: 0000000313-1bf015238d3ac00edae9b7f625f6a3d9fbd6b86efe8a2cd0f31c533fa17a8712
+[oracle: use underscore prefix too (because it's hardcoded in many places)
+tomas.hlavaty@knowledgetools.de**20100325102605
+ Ignore-this: ba653504809d228eebe35d16908845df
+] 
+hash: 0000000389-77edc2d87877fac2266582580a7ddabd61509f4af83dd5f15b28e45b53a7df0f
+[oracle: raw type syntax fix
+tomas.hlavaty@knowledgetools.de**20100325102726
+ Ignore-this: c47315e556e7b066cba161ba99a05c2e
+] 
+hash: 0000000315-e678d487644b41ab4b1b60650c7d91c1bafe90c0fa4a0d40a44cae5cb7927e5d
+[oracle: cosmetic upcase of sql query part
+tomas.hlavaty@knowledgetools.de**20100325102809
+ Ignore-this: 4b4d97032c7258877b7c1ef48a22e855
+] 
+hash: 0000000839-4079ce33b6de6fd2c4b52be1cb870c2593c187b1c76512391b46bc1c388a2568
+[oracle: more syntax nodes ported
+tomas.hlavaty@knowledgetools.de**20100325102943
+ Ignore-this: 3c8273c4a64bb64b448b4b76bbe75487
+] 
+hash: 0000002042-8e2a23f8de61e7cd6c4e04c44fa46219d58e0d6aec4f67c03fb7421170d56d34
+[oracle: more raw type fixes
+tomas.hlavaty@knowledgetools.de**20100325103204
+ Ignore-this: f79604cc4c8d8908b3039cf3359c119
+] 
+hash: 0000000415-34b77e23d54fb1971c01828ab8577229df58706be3d2b9bf1c3958e0d6b942bb
+[oracle: test ported
+tomas.hlavaty@knowledgetools.de**20100325103313
+ Ignore-this: f8fedbf0b1aa8d27cf78843521734135
+] 
+hash: 0000000264-2e08380bbf9fabcfbcea6b7d5e46b3bace0916cd438373541d1b185c5e15dd01
+[oracle: TODO THL comment added
+tomas.hlavaty@knowledgetools.de**20100325103526
+ Ignore-this: cf540795d7beb7f6853d6a352de63566
+] 
+hash: 0000000378-728f4ab1e10fd1dd1a104f3bd56918bf3365fc50dca9e29a95631bb147a578ca
+[oracle: = operator uses to_char if necessary
+tomas.hlavaty@knowledgetools.de**20100325152520
+ Ignore-this: eed846e4246d429c2c0475923a0b7362
+] 
+hash: 0000001070-d0c9831ce1172e2d0264582a252785f6ee0ecce8fc222b5c946534dd211063ee
+[Added TODO file
+levente.meszaros@gmail.com**20100325173853
+ Ignore-this: d936e2a36aa141fd1fb17577c3cdf870
+] 
+hash: 0000000609-e738e60d36c52c13026c9faacf160eabfd1e36b624521a4e3031b3a48ce9a78f
+[TODO updated
+tomas.hlavaty@knowledgetools.de**20100326110556
+ Ignore-this: cc5644ae881c2d78900ea7d82aa285a8
+] 
+hash: 0000017256-407edaf45059559c77428243fa8fd11238099ff350af25ab1a217b912be1ee0c
+[nil and :null lob fixed
+tomas.hlavaty@knowledgetools.de**20100329160619
+ Ignore-this: 585781d93ec2dde1a2d57adf5dee92e6
+] 
+hash: 0000002079-9af79c3e844e0d0fb9c365cbc5445d7565e0be2380e7c74941b27889a3195317
+[typemap debugging functions referenced inderectly via symbol
+tomas.hlavaty@knowledgetools.de**20100329161110
+ Ignore-this: 64dbef80bed9954ad34230d9d3bc25d8
+] 
+hash: 0000003618-8759ea88e0c423341b57cef80f1f1c993bb8a7de6a8bcb56fefdd20a3c00805f
+[TODO file updated
+tomas.hlavaty@knowledgetools.de**20100329161911
+ Ignore-this: f29ca1fc9df2e5e5080ffe858da308a6
+] 
+hash: 0000000440-283caa9c40f2bddc73389eaa3573f39beca5fee5c7cb2ca3615293800b135dc8
+[oracle: select with offset and limit implemented
+tomas.hlavaty@knowledgetools.de**20100330143825
+ Ignore-this: 3954fefa6ca80ac1635360a99d79756f
+] 
+hash: 0000002770-01f6158fb4d8e5e86085d50a99f4531050a95afd0fa1f9de57fab8406df76d3c
+[oracle: select with offset and limit fix
+tomas.hlavaty@knowledgetools.de**20100330144941
+ Ignore-this: 1c6b02593978c2cdd827612472bc7edc
+] 
+hash: 0000000551-89f611ee58c176f2dbaefd81cde810705937e2d60a2513b279c3b4afef8bd658
+[oracle: "FALSE" represents #f too
+tomas.hlavaty@knowledgetools.de**20100331091836
+ Ignore-this: a4ffe22e8c4b78094f9d91305a814726
+] 
+hash: 0000000382-063a540e61571d3206e15db59a20609bd8d1d07e4fd26665529d9ce6d8b1f433
+[TODO updated
+tomas.hlavaty@knowledgetools.de**20100331091931
+ Ignore-this: 43fecaf7447437beeef202d62bef481b
+] 
+hash: 0000000354-8a91f366920737447e507a50b95d5366574757e156cadceacdab194dd303c7d6
+[TODO updated
+tomas.hlavaty@knowledgetools.de**20100401102436
+ Ignore-this: afdd2e15361c50bdbbce5a071de61cdb
+] 
+hash: 0000000639-b10d1181b785bf19e2991d05cd3dcc43c151681be822022c20d143a065e26891
+[expand-sql-ast-into-lambda-form-cached fix
+tomas.hlavaty@knowledgetools.de**20100401161746
+ Ignore-this: 554dda0d8c3512c333464577ffcd6ac
+] 
+hash: 0000002705-21fe54153c64a8a4375fc31179bfb325623bee0a09e1636a91cb26e964261a64
+[TODO updated
+tomas.hlavaty@knowledgetools.de**20100401162500
+ Ignore-this: 5af37b6cca687bb34da1bb364642331e
+] 
+hash: 0000000599-2029e5e7e6d4c16c844f327220b54ad2af7caa5936c2440297c70c55b22e3a5f
+[sql-false-expression introduced to handle 'member' expression portably
+tomas.hlavaty@knowledgetools.de**20100406161110
+ Ignore-this: 835bbe23be7e3534997dec125814b71f
+] 
+hash: 0000000640-1cb193290909e780aedfc9370218bf7819abc2b55d54b8f0fb3e17ac79bd9318
+[oracle: fix sql-query limit with sql-unquote value
+tomas.hlavaty@knowledgetools.de**20100407102104
+ Ignore-this: b72ab702b1f1543c89cfeea5fc1198ff
+] 
+hash: 0000000773-1187a190bbdcc122ce460e630ef89f8621b9f244d4f4d631f1ea548408ddfb10
+[oracle: group-by and having clauses added
+tomas.hlavaty@knowledgetools.de**20100407115243
+ Ignore-this: bf9b35c9cfcec8b3b1ac23c2d5d0b615
+] 
+hash: 0000000678-1c5475da6acf718fbb5c7b981f74c136ce416035332e010acc72b666eee6da5a
+[oracle: offset and limit unquote fix in all cases
+tomas.hlavaty@knowledgetools.de**20100407121718
+ Ignore-this: ae5d5e8c1a67569d883c1a703d216352
+] 
+hash: 0000002764-07debe24289af8dceabb063c5d1f6a31ddc7a76aba678c54e641dfba2ad9c314
+[oracle: previous patch "offset and limit unquote fix in all cases" simplified
+tomas.hlavaty@knowledgetools.de**20100407124710
+ Ignore-this: 2f5e2424a1ec889adfe73fd4aef94330
+] 
+hash: 0000002593-c3521e3db223006308bf8f48325a60811943a746dea5699f7f66f90858055e2b
+[oracle: start-row always 0
+tomas.hlavaty@knowledgetools.de**20100407142153
+ Ignore-this: 3c3e1a676f0d4ad52c641cd8914412d
+] 
+hash: 0000000384-c2f73a43142fead6d731171559b3a966b86714780f9b7bbd28e26a068fa4a123
+[test fix, iter cannot be used inside "sql like" macro
+tomas.hlavaty@knowledgetools.de**20100409131139
+ Ignore-this: 6a82ee1217615767dba29d6c5040ae50
+] 
+hash: 0000000564-4de1bc49817171798727daf94dd6d1a32bd8d1ea72aa5ff6265fb043ad966aea
+[oracle: clob support implemented
+tomas.hlavaty@knowledgetools.de**20100415100530
+ Ignore-this: 7dbafdbd58241af56ec4009c153cb801
+] 
+hash: 0000008521-228ef9e33b6c976ba54ffcae3332dd79fe68462c203653b3067645b79810da8c
+[oracle: blob implemented and clob fixes
+tomas.hlavaty@knowledgetools.de**20100415141449
+ Ignore-this: 800a8e89c6949b39579f159890b27990
+] 
+hash: 0000008186-1c39b8ec62cec6d1143f3b6b2fe8de0b2e164d6ff3b3712b2a44a15055f62bc8
+[oracle: type test fix
+tomas.hlavaty@knowledgetools.de**20100415144626
+ Ignore-this: 6cceaec06f6358d12bce87927807f20d
+] 
+hash: 0000000327-7b0b5abc7f8f38edf510604914af119189fb806217633d1e30cca54a7829e6e9
+[oracle: rename (and remove) long-varchar|long-raw to clob|blob
+tomas.hlavaty@knowledgetools.de**20100416093842
+ Ignore-this: e7ec7fbdf670f2713234d161f491e419
+] 
+hash: 0000002734-bcce09880f1dff44dde9f105c1d81c406052f6e52780afb4f96a85f7c74109c9
+[oracle: binding-types binding-values can be null fix
+tomas.hlavaty@knowledgetools.de**20100416124407
+ Ignore-this: 187dd5be8d64685534047729107b4f5a
+] 
+hash: 0000000293-3f0e23358a7935854c4644bb1d2e547c635ac35594e289d5f4ecfb30a6dedfbe
+[oracle: oci:stmt-fetch used instead of oci:stmt-fetch-2 on allegro
+tomas.hlavaty@knowledgetools.de**20100419153655
+ Ignore-this: 9a522454409d401533cfc3a6f98a25dd
+] 
+hash: 0000001178-79699195fe7502795ce6ef7b29304144708d28c1111298f4588b560b746778c8
+[oracle: assert floatp for float io
+tomas.hlavaty@knowledgetools.de**20100419153817
+ Ignore-this: 12c28be42910a0558217a68c25197b41
+] 
+hash: 0000000266-d75121ae52a80079ed7f586cc29ec5bf2e1e56623040f174ec5997ea64b47f0d
+[oracle: fix in format-sql-syntax-node sql-insert
+tomas.hlavaty@knowledgetools.de**20100419154108
+ Ignore-this: a0810774ef05dc9a06b7381cfbe2e5a9
+] 
+hash: 0000000302-7297a6ef8c33eb3ab551b61b70caac8a5881387dc356552cc1531bd3b2496bea
+[tests: a bit more timestamp related stuff
+attila.lendvai@gmail.com**20100419131906
+ Ignore-this: 850d5491353c15638b3c5b46100778ad
+] 
+hash: 0000003726-e17319d144686b19c4d63df66652fff20a0d6f2c301e8adcfde48b148925f0d2
+[oracle: sql time and date fixes
+tomas.hlavaty@knowledgetools.de**20100420131125
+ Ignore-this: 3da55a7fb822cfae292331acc11c3098
+] 
+hash: 0000000781-b788439642ce3618c4f32966c236453c1023ddd600277b81e11b4c8969b31661
+[type-test fix and conflict resolution
+tomas.hlavaty@knowledgetools.de**20100420131429
+ Ignore-this: 86510d54e48e9e22c3b7a6e88990a6d6
+] 
+hash: 0000002719-c3a0c2a0c4c2c60b7afacb5cc8df9a702e270cecf7c3bede3b24c79bf1c19643
+[separate sql-timestamp-type and sql-timestamp-with-timezone-type as they need strictly different handling and we want errors in case they are missed...
+attila.lendvai@gmail.com**20100420122841
+ Ignore-this: 4398d3414c5818ba1f61808c4557b2bd
+] 
+hash: 0000005240-1484bdd124e0e7091ede32f2856b5eece4c992bcbd1d812e6247c3b5bb132538
+[oracle: unicode clob implemented
+tomas.hlavaty@knowledgetools.de**20100421091731
+ Ignore-this: a265be48e59eced0d1d958c4393fb359
+] 
+hash: 0000002970-bc19fd0a144cdabafa9e0b2927e8d81d46cf411c507738374bee3459d1eaf132
+[oracle: float can coerce from integer too, but not rational
+tomas.hlavaty@knowledgetools.de**20100421094049
+ Ignore-this: 30c96e3083c84b63f47a5df0bdf99f43
+] 
+hash: 0000000433-c59c77ed74a7706dcd50055a399a6bb045ef6d70cde9b9f3d06bc30d5876a6b0
+[oracle: nsec fix for timestamp with timezone
+tomas.hlavaty@knowledgetools.de**20100421102319
+ Ignore-this: 64bbfcb348fe8064efb358b52a012ffe
+] 
+hash: 0000000470-9f1ae7284eca6fa872655dd271a8385496a63b893f87f98c3dc23bf80ae45b3b
+[oracle: OCI_SUCCESS_WITH_INFO is a success too (ignore warning)
+tomas.hlavaty@knowledgetools.de**20100421124552
+ Ignore-this: 1472bddbcbe53cd60123eef1a10c1f32
+] 
+hash: 0000000280-149bd2a2b3f9080f677bfc032552d067578a9973a9da855742f4c7ad6cc182ac
+[oracle: sql-insert syntax fix in formatter
+tomas.hlavaty@knowledgetools.de**20100421124743
+ Ignore-this: 272aa8d267dc26804a1b768dc9f8abf9
+] 
+hash: 0000000670-466affcdef8b2cb8ff3c8a4777f8e8ee5e2f5163d503a85778ba3cf72c50fb71
+[oracle: blob comparison allowed in where clause
+tomas.hlavaty@knowledgetools.de**20100421141743
+ Ignore-this: d250fcebc7ad6eabd5c8f83027c4733a
+] 
+hash: 0000002988-ccf3bedc1ff4ab377086704dffff50508f71c055c8f5f62b0aec70412f4d1b79
+[oracle: sql clob eq comparison operator fixed
+tomas.hlavaty@knowledgetools.de**20100421155311
+ Ignore-this: e05ffd6b9c728a3f3d636e51ae27833c
+] 
+hash: 0000002769-9e7a6364344728f1a06b340d58f1372bfa3d360bb203de5569c12919e5436d4f
+[oracle: fix table name args in hardcoded sql statements
+tomas.hlavaty@knowledgetools.de**20100422131853
+ Ignore-this: 159810085cca97c0226bd00827eb3bae
+] 
+hash: 0000000901-a585ef1fe9062b1ee6c93f78d21534d1343d30b0ace309d72c6b1550123ec412
+[oracle: timezone rough fix
+tomas.hlavaty@knowledgetools.de**20100422132130
+ Ignore-this: f58604d9055eef1c6a755764ea598d5a
+] 
+hash: 0000000338-64f40a3ba16a03804a835aa3a18d1e15c55de3da31c75a28983c870fcc3f570f
+[oracle: fixed sql insert returning into syntax
+tomas.hlavaty@knowledgetools.de**20100423085754
+ Ignore-this: 6c34535c1155a18e4876cbbc368b2ee5
+] 
+hash: 0000000803-b80ccdef2993207076650cdd9b1174abf44fec47de998ac6c8800b84a26eed95
+[oracle: sql operator = fix for sql-unquote
+tomas.hlavaty@knowledgetools.de**20100423154509
+ Ignore-this: 857482344da7d0b7dfeb8d69a58d26f
+] 
+hash: 0000001813-753ef34ee3b69ff90af9ca8843b24038e679da71ef01ebd908c1036e6bf3f1f3
+[aggregate-function distinct added
+david.lichteblau@knowledgetools.de**20100423154735
+ Ignore-this: 61c8d6dda81b783e438353ba17053b0f
+] 
+hash: 0000000466-f760c3fc805584a4948e7d548b478a56e1fa3627b071a9b1b3635111df76a5a7
+[database-list-table-primary-constraints implemented
+tomas.hlavaty@knowledgetools.de**20100426115906
+ Ignore-this: 54a2721f1195534ed3a2e75be6682736
+] 
+hash: 0000001583-8939eaf30ea81c959c4d09fdd9e8db4d985a50b7aef2eb9ee88db12c3190587b
+[oracle: sql-case ported
+tomas.hlavaty@knowledgetools.de**20100427144651
+ Ignore-this: ef7939f97f7a1f3f3b1f446b2677bc84
+] 
+hash: 0000001593-5011d6d2a22dacf18e4560cc4fcd3ce1852d1e77719f1a14d18ce2cc18f8f6f8
+[oracle: sql-case ported fix
+tomas.hlavaty@knowledgetools.de**20100427145722
+ Ignore-this: 97461f2d0e7420b0ca5f54f4076aa771
+] 
+hash: 0000000169-106c59da77e97dbfb24a03aa66e9b987e1657b7e8db1dfbbb327604178aa3c49
+[savepoint operations added
+tomas.hlavaty@knowledgetools.de**20100428155132
+ Ignore-this: c8fc6de5ffa5e96392b005229842b5c0
+] 
+hash: 0000000926-69806a2ff413e594c154016e5f09989881725ad346c716c55a6a07ea35b94498
+[oracle: sql-case fix
+tomas.hlavaty@knowledgetools.de**20100428155235
+ Ignore-this: 3bebd2e0aec85b69f1e70066f5db9194
+] 
+hash: 0000000255-7462d37559ad698cee1c5dccfed052c73b0d60239c571fb9356e3f13015cd15f
+[oracle: sql-update works with lobs now
+tomas.hlavaty@knowledgetools.de**20100505114307
+ Ignore-this: 237f7965ca168b1e5d08ebc92687c3f7
+] 
+hash: 0000003087-c5809af8744eb371fc183819b98e1f30f1d623555a9fbba9cb56642fb20cde10
+[oracle: numeric types reflection fixed
+tomas.hlavaty@knowledgetools.de**20100506131128
+ Ignore-this: 706be704e1ea6da89291a5bc87f13a4e
+] 
+hash: 0000000936-426a6c5f425e581c44a3e7b717a7e78e2f816d51a306d20c380fc0e09f15a069
+[oracle: boolean in db uses Y/N instead T/F
+tomas.hlavaty@knowledgetools.de**20100506131213
+ Ignore-this: 4c733ee61636186da1901e4fceae1fb6
+] 
+hash: 0000000856-3a78b7115a70edc452f995ac0e1a7d38bc7a09404a29e05e87f75107e9dc9250
+[oracle: booleans tested explicitly against Y/N in expressions
+tomas.hlavaty@knowledgetools.de**20100510160658
+ Ignore-this: c68a6224816a0f5fcd03649fe70d7309
+] 
+hash: 0000001660-a9ff758987dd6f5f03d5ca9da18ae99ad756b35dc52e57013f18d16456c4964d
+[oracle: ban general number types like float, rational and number
+tomas.hlavaty@knowledgetools.de**20100512120925
+ Ignore-this: 5a56b86644217c1da49c7a45241f9d91
+] 
+hash: 0000000503-c566fbb3b0cc8bf4a61f1f9d40274b322138f74390e0c15cde8f7d6ba93e6740
+[more convenient print-object of syntax nodes
+tomas.hlavaty@knowledgetools.de**20100512142924
+ Ignore-this: 5b787dd32c549ef3af09c1f041a7066
+] 
+hash: 0000000991-e2008dc5e1324e2bd82168348e3641334ff863d9efd936a521d9ea6ef4993d3d
+[offset and limit in sql query are integer instead of number
+tomas.hlavaty@knowledgetools.de**20100512165607
+ Ignore-this: 109d607dcb5480cef0bfdcc1ea51fd93
+] 
+hash: 0000000347-55132db89fc8214952c05349a42dd2dca1629b79bfd8b1f6b0edf40606800c98
+[column-spec and sort-key s/number/integer/
+tomas.hlavaty@knowledgetools.de**20100512165951
+ Ignore-this: aff74301c2764ad709b5d60b336b98d7
+] 
+hash: 0000000386-940d191abca4ef93f8ef36a9c46e745654e6b41ebbe9a60d562923d75d29ea5e
