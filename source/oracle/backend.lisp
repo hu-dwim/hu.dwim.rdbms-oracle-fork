@@ -150,7 +150,7 @@
 
 (def function disconnect (transaction)
   (assert (environment-handle-pointer transaction))
-  
+
   (ignore-errors*
     (rdbms.debug "Calling logoff in transaction ~A" transaction)
     (oci-call (oci:logoff (service-context-handle-of transaction)
@@ -158,7 +158,7 @@
   (ignore-errors*
     (rdbms.debug "Freeing environment handle of transaction ~A" transaction)
     (oci-call (oci:handle-free (environment-handle-of transaction) oci:+htype-env+)))
-  
+
   (macrolet ((dealloc (&rest whats)
                `(progn
                  ,@(loop for what in whats
@@ -197,13 +197,13 @@
   (let ((needs-scrollable-cursor-p (and start-row (> start-row 0))))
     ;; make bindings
     (setf (bindings-of statement) (make-bindings statement transaction binding-types binding-values))
-    
+
     ;; execute
     (stmt-execute statement
                   (if needs-scrollable-cursor-p
                       (logior *default-oci-flags* oci:+stmt-scrollable-readonly+)
                       *default-oci-flags*))
-  
+
     ;; fetch
     (cond
       ((select-p statement)
@@ -329,7 +329,7 @@
     (when constructor
       (loop for i from 0 below number-of-rows
             do (funcall constructor (cffi:inc-pointer ptr (* i size)))))
-    
+
     (values
      ptr
      size)))
@@ -483,8 +483,8 @@
              (oci-string-to-lisp
               (cffi:mem-ref attribute-value '(:pointer :unsigned-char)) ; OraText*
               (cffi:mem-ref attribute-value-length 'oci:ub-4))))
-              
-            
+
+
       (let ((column-name (oci-string-attr-get oci:+attr-name+))
             (column-type (oci-attr-get oci:+attr-data-type+ 'oci:ub-2))
             (column-size)
@@ -503,7 +503,7 @@
 
         (rdbms.dribble "Retrieving column: name=~W, type=~D, size=~D"
                        column-name column-type column-size)
-        
+
         (when (= column-type oci:+sqlt-num+)
           ;; the type of the precision attribute is 'oci:sb-2, because we
           ;; use an implicit describe here (would be sb-1 for explicit describe)

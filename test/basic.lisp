@@ -140,6 +140,7 @@
     (ignore-errors
       (execute-ddl [drop table test_table]))))
 
+;; TODO THL this test must be independent of what backend i'm using right now
 (def test test/basic/expand-sql-ast/binding ()
   (unwind-protect
        (with-transaction

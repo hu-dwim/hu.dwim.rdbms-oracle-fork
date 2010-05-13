@@ -99,6 +99,7 @@
   ((oracle "INSERT INTO \"t\" (\"col1\", \"col2\", \"col3\", \"col4\") VALUES (42, :1, :2)") ;; TODO THL and the type spec ars?
    (postgresql "INSERT INTO t (col1, col2, col3, col4) VALUES (42, $1::CHARACTER VARYING, $2::CHARACTER VARYING)")))
 
+;; TODO THL this test must be independent of what backend i'm using right now
 (def syntax-test test/syntax/expand-sql-ast/unquote/1 postgresql (&optional (n 3))
   ;; "SELECT a, b FROM t WHERE (t.b OR t.b OR t.b)"
   (bind ((expected (format nil "SELECT a, b FROM t WHERE (~A)"
@@ -131,6 +132,7 @@
                           :tables '(t)
                           :where criteria)))))))))
 
+;; TODO THL this test must be independent of what backend i'm using right now
 (def syntax-test test/syntax/expand-sql-ast/unquote/2 postgresql (&optional (n 3))
   ;; "SELECT a, b FROM t WHERE ((a = (b + $1::NUMERIC + 1)) OR (a = (b + $2::NUMERIC + 2)) OR (a = (b + $3::NUMERIC + 3)))"
   (bind ((expected (format nil "SELECT a, b FROM t WHERE (~A)"
@@ -171,11 +173,12 @@
            (funcall
             (compile
              nil
-             (expand-sql-ast-into-lambda-form-cached
+             (hu.dwim.rdbms::expand-sql-ast-into-lambda-form
               (sql-select :columns '(a b)
                           :tables '(t)
                           :where criteria)))))))))
 
+;; TODO THL this test must be independent of what backend i'm using right now
 (def syntax-test test/syntax/expand-sql-ast/unquote/3 postgresql (&optional (n 3))
   (bind ((criteria [or ,@(loop for i from 1 to n
                                collect [= a

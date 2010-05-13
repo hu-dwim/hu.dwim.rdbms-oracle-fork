@@ -50,26 +50,26 @@
                               sql-date-type
                               sql-time-type)
                           (if (stringp value)
-                              ;; let the user talk to PostgreSQL directly using strings
+                              ;; we let the user talk to PostgreSQL directly using strings
                               value
                               (etypecase type
                                 (sql-timestamp-type
                                   ;; PostgreSQL for timestamp columns sends back exactly the same value that was given at insert,
                                   ;; so we are safe to send down UTC timestamps if we will also parse them back in UTC.
-                                  ;; random, somewhat related useful info: http://forums.mor.ph/forums/8/topics/189
+                                  ;; Random useful and somewhat related info: http://forums.mor.ph/forums/8/topics/189
                                   (local-time:format-rfc3339-timestring nil value :timezone local-time:+utc-zone+))
                                 (sql-date-type
                                   (unless (and (zerop (local-time:sec-of value))
                                                (zerop (local-time:nsec-of value)))
                                     (cerror "continue"
-                                            "Binding a local-time date that has time values which is about to be silently dropped. The binding value in question is: ~A"
-                                            value))
+                                            "Binding a local-time date value as ~S with non-zero time values; time values will be silently dropped! The bound value in question is: ~A"
+                                            'sql-date-type value))
                                   (local-time:format-rfc3339-timestring nil value :omit-time-part #t :timezone local-time:+utc-zone+))
                                 (sql-time-type
                                   (unless (zerop (local-time:day-of value))
                                     (cerror "continue"
-                                            "Binding a local-time time that has day value which is about to be silently dropped. The binding value in question is: ~A"
-                                            value))
+                                            "Binding a local-time time value as ~S with non-zero day value; day value will be silently dropped! The bound value in question is: ~A"
+                                            'sql-time-type value))
                                   (local-time:format-rfc3339-timestring nil value :omit-date-part #t :timezone local-time:+utc-zone+)))))
                          ((or sql-simple-type
                               sql-string-type

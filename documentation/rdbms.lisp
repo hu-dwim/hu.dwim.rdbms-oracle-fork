@@ -9,9 +9,9 @@
 (def project :hu.dwim.rdbms :path (system-pathname :hu.dwim.rdbms))
 
 (def method make-project-tab-pages ((component project/detail/inspector) (project (eql (find-project :hu.dwim.rdbms))))
-  (append (list (tab-page/widget (:selector (icon switch-to-tab-page :label "User guide"))
+  (append (list (tab-page/widget (:selector (icon/widget switch-to-tab-page :label "User guide"))
                   (make-value-inspector (find-book 'user-guide)))
-                (tab-page/widget (:selector (icon switch-to-tab-page :label "Dictionary"))
+                (tab-page/widget (:selector (icon/widget switch-to-tab-page :label "Dictionary"))
                   (make-value-inspector (mapcar 'find-dictionary '(database transaction transaction-hook execute command cursor table column view sequence index)))))
           (call-next-method)))
 
@@ -42,16 +42,16 @@ When reinstalling an \"rm /etc/default/oracle-xe\" may ease things a lot."))
   (chapter (:title "Tutorial")
     )
   (chapter (:title "TODO")
-    "The create/alter/drop table AST should really be structured like (create (table :name ... :columns ...)) and (alter (table ...))
-where the (table ...) part is a shared table description. then a new format sub-protocols should be started for create and alter
-that works from the shared (table ...) ast node.
+    "The create/alter/drop table AST should really be structured like (create (table :name ... :columns ...)) and (alter (table ...)) where the (table ...) part is a shared table description. then a new format sub-protocols should be started for create and alter that works from the shared (table ...) ast node.
 
 same applies to sql-create-index, sql-drop-index, sql-create-sequence, sql-drop-sequence
 
 introduce a named-sql-syntax-node, add a print-object method for it.
 
 :null should be converted back to cl:nil in the query results, except for boolean columns (the columns of the result
-contain the type information necessary for this). this needs changes in hu.dwim.perec.")
+contain the type information necessary for this). this needs changes in hu.dwim.perec."
+    (chapter (:title "with-database-connection")
+      "hu.dwim.rdbms is missing a WITH-DATABASE-CONNECTION abstraction that could wrap several WITH-TRANSACTION blocks and also make (execute \"DROP DATABASE foo\") and prepare the path for connection pooling."))
   (chapter (:title "Concepts")
     (chapter (:title "Database")
       )

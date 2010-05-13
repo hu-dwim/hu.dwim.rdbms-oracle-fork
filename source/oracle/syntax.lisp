@@ -211,8 +211,61 @@
   (:format-sql-syntax-node
    (format-string "EMPTY_BLOB()")))
 
+(def function sql-unquote-binding-types (sql-unquote database) ;; TODO THL use or remove
+  (bind ((*print-pretty* nil)
+         (*print-circle* nil)
+         (*sql-stream* (make-string-output-stream))
+         (*binding-variables* (make-array 16 :adjustable t :fill-pointer 0))
+         (*binding-types* (make-array 16 :adjustable t :fill-pointer 0))
+         (*binding-values* (make-array 16 :adjustable t :fill-pointer 0))
+         (*database* database))
+    (print (get-output-stream-string *sql-stream*))
+    (print *command-elements*)
+    (print *binding-variables*)
+    (print *binding-types*)
+    (print *binding-values*)
+    (format-sql-syntax-node sql-unquote database)
+    ;;(format-comma-separated-identifiers sql-unquote database)
+    #+nil
+    (let ((formatter 'format-sql-syntax-node))
+      (labels ((process (node)
+                 (print node)
+                 (cond ((consp node)
+                        (cons (process (car node))
+                              (process (cdr node))))
+                       ((typep node 'sql-unquote)
+                        (error "In ~A sql-unquote nodes cannot be nested without intermediate literal sql-syntax-nodes" sql-unquote))
+                       ((typep node 'sql-syntax-node)
+                        (bind ((form (if *expand-cached*
+                                         (expand-sql-ast-into-lambda-form-cached node :toplevel #f)
+                                         (expand-sql-ast-into-lambda-form node :toplevel #f))))
+                          (etypecase form
+                            (string
+                             `(lambda ()
+                                (write-string ,form *sql-stream*)))
+                            (cons form))))
+                       (t
+                        ;;(error "TODO ~a" node)
+                        node))))
+        ;;(process (form-of sql-unquote))
+        (push-form-into-command-elements
+         `(,@(if (symbolp formatter)
+                 `(,formatter)
+                 `(funcall ',formatter))
+             ,(process (form-of sql-unquote)) *database*))))
+    ;;(format-sql-literal columns database)
+    (print (get-output-stream-string *sql-stream*))
+    (print *command-elements*)
+    (print *binding-variables*)
+    (print *binding-types*)
+    (print *binding-values*)))
+
 (def method format-sql-syntax-node ((self sql-insert) (database oracle))
   (with-slots (table columns values subselect) self
+    (assert (not (typep columns 'sql-unquote))) ;; TODO THL how to handle this?
+    #+nil
+    (when (typep columns 'sql-unquote)
+      (sql-unquote-binding-types columns database))
     (flet ((make-lob (column)
              (etypecase (type-of column)
                (sql-character-large-object-type (make-instance 'sql-empty-clob))

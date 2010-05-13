@@ -5,11 +5,89 @@
 #+STARTUP: hidestars
 #+STARTUP: overview
 
-* TODO [#B] add a slot to database to specify whether names must be wrapped in quotes or not  :Unassigned:minor:FEATURE:
+* TODO [#C] add a slot to database to specify whether names must be wrapped in quotes or not :Kami:minor:FEATURE:
 
 Databases are usually case insensitive, but there might be an existing database which is not.
 
 Or, simply get rid of double quotes around literals if it works with Oracle.
+
+Transcript of #dwim.hu on 2010-04-06
+
+<kami`> oracle upcases everything, unless quoted with "  [17:10]
+<kami`> pg downcases everything unless quoted with "
+<kami`> there are lots of (string-downcase name) calls in the generic
+        implementation  [17:11]
+<kami`> I would have liked to not rely on case sensitivity.  [17:12]
+<kami`> But attila_lendvai correctly stated that for tables with reserved
+        names, it would only work with quotes.
+<kami`> I proposed to have a list of reserved words for each DB (which is
+        easily accessible on the net, as there are many others with the same
+        problem)  [17:14]
+<kami`> But that is too much magic for attila_lendvai 
+<levente_meszaros> what about the option on the database instance?  [17:15]
+<levente_meszaros> e.g. :downcase :upcase :quote :as-is 
+<attila_lendvai> or a lambda
+<attila_lendvai> presumably with a symbol denoting a defun
+
+[...]
+
+<levente_meszaros> here are the use cases  [19:04]
+<levente_meszaros> in one DB I'd like to have the simple syntax without quotes
+<levente_meszaros> it is easier to read, etc.  [19:05]
+<levente_meszaros> in another DB I _must_ use the quoted syntax because other
+                 tools are also using the DB and I must be able to work with
+                 them
+<kami`> OK. So, a slot of class database is it?  [19:06]
+<kami`>  and format-sql-identifier honours that slot
+<levente_meszaros> I think the same, yes  [19:07]
+<kami`> the slot can hold :downcase :upcase :quote :as-is, or a lambda
+<levente_meszaros> except I don't know how is this related to
+                 calculate-rdbms-name and rdbms-name-for
+<levente_meszaros> and what to do with other direction DB -> lisp
+<kami`> the other direction will work nicely with :as-is  [19:08]
+<levente_meszaros> IIRC we downcase now
+<levente_meszaros> as-is is ok, and we can put another slot for that if needed
+                                                                        [19:09]
+
+* TODO [#C] refactor calculate-rdbms-name and rdbms-name-for for flexible identifier formatting :Kami:minor:FEATURE:
+
+Transcript of #dwim.hu on 2010-04-06
+ 
+<levente_meszaros> what about calculate-rdbms-name and friends
+<kami`> I'll check them. I think they use string-downcase, currently
+<kami`> and can be refactored to use format-sql-identifier  [19:10]
+
+* TODO [#C] better document why calculate-rdbms-name is in rdbms and not in perec :Unassigned:minor:TASK:
+
+Transcript of #dwim.hu on 2010-04-06
+
+<levente_meszaros> what about calculate-rdbms-name and friends
+<kami`> I'll check them. I think they use string-downcase, currently
+<kami`> and can be refactored to use format-sql-identifier  [19:10]
+<levente_meszaros> oops, they are not even called from hu.dwim.rdbms
+<levente_meszaros> they are exclusively for perec
+<levente_meszaros> so much for modularity
+<kami`> attila_lendvai had a good point
+<kami`> the name stuff is very close to the restrictions of the db backend
+                                                                        [19:11]
+<levente_meszaros> putting a lambda there?
+<kami`> so, it is valid to have them in rdbms
+<kami`> but, with the changes which we laid out, ...
+<kami`> one might be able to move them out
+<kami`> into perec  [19:12]
+<levente_meszaros> ah, you mean as a reusable API
+<levente_meszaros> that's a valid point
+<levente_meszaros> but that just means that these functions are somewhat
+                 unrelated to that slot on the DB
+<kami`> e.g. if prepending a _ is not allowed in a certain db, then it is not
+        good to have that function in perec  [19:13]
+<kami`> that should be functionality which is better encapsulated in rdbms
+<levente_meszaros> e.g. #\- is not valid character in a name without quotes
+                                                                        [19:14]
+<levente_meszaros> agreed
+<kami`> But, until now, everybody was surprised to find this functionality in
+        rdbms and not in perec :)
+<kami`> So maybe one should document that better.  [19:15]
 
 * TODO [#C] update tests to reflect changes to EXPAND-SQL-AST
 
@@ -352,3 +430,42 @@ Restarts:
  4: [RESTART-TRANSACTION] rollback the transaction by unwinding the stack and restart the WITH-TRANSACTION block in a new database transaction
  5: [CONTINUE] Skip the rest of the test HU.DWIM.PEREC.TEST::TEST/PERSISTENCE/TYPE/TEXT/3 and continue by returning (values)
 #+end_src
+
+* TODO [#C] implement sqlite database-list-table-columns based on pragma table_info :Unassigned:minor:FEATURE:
+
+[[file:source/sqlite/ddl.lisp][sqlite function database-list-table-columns]]
+
+* TODO [#C] document prerequisites for running the test suite for each backend  :Unassigned:minor:TASK:
+
+including the cffi library lookup etc.
+* TODO [#C] document boolean <-> char(1) Y/N mapping for oracle                 :Unassigned:minor:TASK:
+* TODO [#C] create macro for db-specific sql in tests                           :Kami:minor:TASK:
+
+Transcript of #dwim.hu on 2010-04-06
+
+<kami`> Tests are another problem
+<kami`> They contain tons of verbatim sql which is not portable to databases
+        with :quote and :upcase  [19:17]
+<levente_meszaros> ah, yes, but it's ok if the tests are only run with a
+                 specific DB setting  [19:18]
+<levente_meszaros> we can't test all combinations of all parameters, that
+                 would run till the end of the universe
+<kami`> even then, some things are really not portable
+<levente_meszaros> if something is not portable, we should make the test so
+                 that it expects that failure
+<kami`> oracle uses 'create global temporary table' where every other DB and
+        the standard uses 'create temporary table'  [19:19]
+<kami`> you mean sth like (if (typep *database* ... ?
+<levente_meszaros> we already have DB specific tests
+<levente_meszaros> yes  [19:20]
+<kami`> lemme check
+<levente_meszaros> see sexp-sql-dialect-test
+<levente_meszaros> or rather dialect-test  [19:21]
+<kami`> So, I'll write a macro execute-db-specific-sql  [19:24]
+<kami`> (execute-db-specific-sql
+<kami`>   (oracle "....")  [19:25]
+<kami`> (sqlite "....")
+<kami`> (t "...."))
+<kami`> along the same lines
+<levente_meszaros> that would be ok in the tests  [19:31]
+

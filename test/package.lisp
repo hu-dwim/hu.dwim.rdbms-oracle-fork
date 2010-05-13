@@ -4,7 +4,7 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :hu.dwim.util)
+(in-package :hu.dwim.def)
 
 (def package :hu.dwim.rdbms.test
   (:use :hu.dwim.common
@@ -40,7 +40,7 @@
 
   (:readtable-setup
    (setup-readtable/same-as-package :hu.dwim.rdbms)
-   (enable-string-quote-syntax)
+   (hu.dwim.syntax-sugar:enable-string-quote-syntax)
    (hu.dwim.rdbms:enable-sql-syntax)))
 
 (in-package :hu.dwim.rdbms.test)

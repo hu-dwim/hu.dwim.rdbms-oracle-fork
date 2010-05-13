@@ -4,7 +4,7 @@
 ;;;
 ;;; See LICENCE for details.
 
-(in-package :hu.dwim.util)
+(in-package :hu.dwim.def)
 
 (def package :hu.dwim.rdbms
   (:use :babel
@@ -75,7 +75,7 @@
            #:collect-rows
            #:current-row)
   (:readtable-setup
-   (enable-standard-hu.dwim-syntaxes)
+   (hu.dwim.util:enable-standard-hu.dwim-syntaxes)
    (hu.dwim.syntax-sugar:enable-lambda-with-bang-args-syntax)))
 
 (in-package :local-time)

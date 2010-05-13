@@ -153,7 +153,7 @@
                   (drop-column ()
                     :report (lambda (stream)
                               (format stream "DESTRUCTIVE: Drop column ~S in table ~S (type ~A) and try adding it brand the new with type ~A"
-                                      table-name column-name (type-of table-column) (type-of column)))
+                                      column-name table-name (type-of table-column) (type-of column)))
                     (with-transaction
                       (drop-column table-name column-name #t)
                       (add-column table-name column))))))
