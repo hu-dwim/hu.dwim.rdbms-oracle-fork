@@ -530,6 +530,23 @@
                                       (format-string ")"))
                                     (format-sql-syntax-node x db))))
        (format-char ")"))
+      ((equal "||" name)
+       (format-string "(")
+       (format-separated-list
+        expressions name database
+        (lambda (x db)
+          (declare (ignore db))
+          (if (and (typep x 'sql-literal)
+                   (typep (type-of x) 'sql-character-large-object-type)
+                   (not (size-of (type-of x)))
+                   (stringp (value-of x))
+                   (value-of x))
+              (progn
+                (format-string "'")
+                (format-string (value-of x))
+                (format-string "'"))
+              (format-sql-syntax-node x database))))
+       (format-string ")"))
       (t (call-next-method)))))
 
 (def method format-sql-syntax-node ((x sql-drop-column-action) (database oracle))

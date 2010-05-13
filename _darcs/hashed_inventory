@@ -1,4 +1,4 @@
-pristine:0000001842-cf73815608e2e4b1a4647a3badfdef9ac2e2b71b75cee5d17e6cfe4c2719ddfc
+pristine:0000001842-b2e03a10769ed2cf359245dcb2183edbb6ff6cebb0618cb9d187b5a50c70b39f
 Starting with inventory:
 0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
 [TAG 2008-11-27
@@ -839,3 +839,8 @@ tomas.hlavaty@knowledgetools.de**20100512165951
  Ignore-this: aff74301c2764ad709b5d60b336b98d7
 ] 
 hash: 0000000386-940d191abca4ef93f8ef36a9c46e745654e6b41ebbe9a60d562923d75d29ea5e
+[oracle: || operator works witch clobs passed in
+tomas.hlavaty@knowledgetools.de**20100513101751
+ Ignore-this: 88b35d8ef38711b6dfa860fd3f095782
+] 
+hash: 0000000826-82170db0b5c9f395876d9ee9c89f2f552cf6b16547e0d57c75e9367f2afd057b
