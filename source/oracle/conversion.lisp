@@ -149,6 +149,7 @@
 ;;; Character data conversions
 
 (def function string-to-string (value)
+  (assert (and (stringp value) (not (equal "" value))))
   (foreign-oci-string-alloc value))
 
 (def function string-from-string (ptr length)
@@ -156,7 +157,7 @@
   (oci-string-to-lisp ptr))
 
 (def function string-to-clob (str)
-  (declare (ignore str))
+  (assert (and (stringp str) (not (equal "" str))))
   (make-lob-locator))
 
 (def function string-from-clob (ptr len)
@@ -167,7 +168,7 @@
 ;;; Binary data conversions
 
 (def function byte-array-to-blob (ba)
-  (assert (typep ba 'vector)) ; '(vector (unsigned-byte 8))
+  (assert (and (typep ba 'vector) (not (equalp #() ba)))) ; '(vector (unsigned-byte 8))
   (make-lob-locator))
 
 (def function byte-array-from-blob (ptr len)

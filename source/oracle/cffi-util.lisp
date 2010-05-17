@@ -223,9 +223,15 @@
         (set-empty-lob locator))
       (values locator (cffi:foreign-type-size :pointer)))))
 
-(def function lobp (sql-type)
-  (or (typep sql-type 'sql-character-large-object-type)
-      (typep sql-type 'sql-binary-large-object-type)))
+(def function clob-type-p (sql-type)
+  (typep sql-type 'sql-character-large-object-type))
+
+(def function blob-type-p (sql-type)
+  (typep sql-type 'sql-binary-large-object-type))
+
+(def function lob-type-p (sql-type)
+  (or (clob-type-p sql-type)
+      (blob-type-p sql-type)))
 
 (def function lob-get-length (svchp errhp locator)
   (cffi:with-foreign-object (len 'oci:ub-4)
@@ -253,7 +259,7 @@
   (oci-call (oci:lob-flush-buffer svchp errhp locator oci:+lob-buffer-nofree+)))
 
 (def method upload-lob (locator (value string))
-  (assert (plusp (length value))) ;; use :null instead
+  (assert (plusp (length value)))
   (let ((svchp (service-context-handle-of *transaction*))
         (errhp (error-handle-of *transaction*)))
     (multiple-value-bind (bufp siz) (foreign-oci-string-alloc value)
@@ -262,7 +268,7 @@
         (cffi:foreign-string-free bufp)))))
 
 (def method upload-lob (locator (value vector))
-  (assert (plusp (length value))) ;; use :null instead
+  (assert (plusp (length value)))
   (let ((svchp (service-context-handle-of *transaction*))
         (errhp (error-handle-of *transaction*))
         (siz (array-dimension value 0)))
@@ -293,7 +299,9 @@
                    (setf (cffi:mem-aref bufp 'oci:ub-1 (- siz i 1)) 0))
                  (oci-string-to-lisp bufp siz))
             (cffi-sys:foreign-free bufp)))
-        :null)))
+        (if (zerop siz)
+            ""
+            (error "unexpected clob length ~s" siz)))))
 
 (def function download-blob (locator)
   (let* ((svchp (service-context-handle-of *transaction*))
@@ -310,4 +318,6 @@
                     do (setf (aref result i) (cffi:mem-aref bufp 'oci:ub-1 i)))
                  result)
             (cffi:foreign-string-free bufp)))
-        :null)))
+        (if (zerop siz)
+            #()
+            (error "unexpected blob length ~s" siz)))))

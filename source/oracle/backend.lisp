@@ -229,7 +229,8 @@
             for type across binding-types
             for value across binding-values
             for binding in (bindings-of statement)
-            when (and (lobp type) (not (member value '(:null nil))))
+            when (and (lob-type-p type)
+                      (not (member value '(:null nil #()) :test #'equalp)))
             do (upload-lob (cffi:mem-aref (data-pointer-of binding) :pointer) value)))
        (values nil (get-row-count-attribute statement)))))) ;; TODO THL what should the first value be?
 
@@ -271,7 +272,7 @@
       (rdbms.dribble "Value ~S converted to ~A" value (dump-c-byte-array data-pointer data-size))
 
       ;; TODO THL why **locator and not *locator? stmt-execute crashes:-{
-      (when (lobp sql-type)
+      (when (lob-type-p sql-type)
         (setq data-pointer (cffi:foreign-alloc :pointer :initial-element data-pointer)))
       
       (oci-call (oci:bind-by-pos statement-handle

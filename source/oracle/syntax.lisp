@@ -260,30 +260,49 @@
     (print *binding-types*)
     (print *binding-values*)))
 
+(def function make-empty-lob-syntax-node (column)
+  (etypecase (type-of column)
+    (sql-character-large-object-type (make-instance 'sql-empty-clob))
+    (sql-binary-large-object-type (make-instance 'sql-empty-blob))))
+
+(def function filter-lob-columns-and-values (columns values)
+  (let ((lob-columns nil)
+        (other-columns nil)
+        (lob-values nil)
+        (other-values nil))
+    (loop
+       for column in columns
+       for value in values
+       do (if (lob-type-p (and (typep column 'sql-column) (type-of column)))
+              (cond
+                ((or (member value '(nil :null))
+                     (and (typep value 'sql-literal)
+                          (member (value-of value) '(nil :null))))
+                 (push column other-columns)
+                 (push (if (typep value 'sql-literal) (value-of value) value)
+                       other-values))
+                ((or (equalp #() value)
+                     (and (typep value 'sql-literal)
+                          (equalp #() (value-of value))))
+                 (push column other-columns)
+                 (push (make-empty-lob-syntax-node column) other-values))
+                (t
+                 (push column lob-columns)
+                 (push value lob-values)))
+              (progn
+                (push column other-columns)
+                (push value other-values))))
+    (values lob-columns other-columns lob-values other-values)))
+
 (def method format-sql-syntax-node ((self sql-insert) (database oracle))
   (with-slots (table columns values subselect) self
     (assert (not (typep columns 'sql-unquote))) ;; TODO THL how to handle this?
     #+nil
     (when (typep columns 'sql-unquote)
       (sql-unquote-binding-types columns database))
-    (flet ((make-lob (column)
-             (etypecase (type-of column)
-               (sql-character-large-object-type (make-instance 'sql-empty-clob))
-               (sql-binary-large-object-type (make-instance 'sql-empty-blob)))))
-      (let ((lob-columns nil)
-            (other-columns nil)
-            (lob-values nil)
-            (other-values nil))
-        (loop
-           for column in columns
-           for value in (when (slot-boundp self 'values) values)
-           do (if (lobp (and (typep column 'sql-column) (type-of column)))
-                  (progn
-                    (push column lob-columns)
-                    (push value lob-values))
-                  (progn
-                    (push column other-columns)
-                    (push value other-values))))
+    (let ((values (and (slot-boundp self 'values) values)))
+      (multiple-value-bind (lob-columns other-columns lob-values other-values)
+          (filter-lob-columns-and-values columns values)
         (format-string "INSERT INTO ")
         (format-sql-identifier table database)
         (let ((cols (append other-columns lob-columns)))
@@ -291,23 +310,21 @@
             (format-string " (")
             (format-comma-separated-identifiers cols database)
             (format-char ")")))
-        (when (slot-boundp self 'values)
+        (when values
           (format-string " VALUES (")
           (format-comma-separated-list
-           (append other-values (mapcar #'make-lob lob-columns))
+           (append other-values (mapcar #'make-empty-lob-syntax-node lob-columns))
            database)
           (format-char ")"))
         (when (slot-boundp self 'subselect)
           (format-sql-syntax-node subselect database))
-        (when (and lob-columns
-                   (remove-if (lambda (x) (member x '(:null nil))) lob-values))
+        (when lob-columns
           (format-string " RETURNING ")
           (loop
              for n = (length lob-columns)
              for column in lob-columns
              for value in lob-values
              for j from 1
-             unless (member value '(:null nil))
              do (progn
                   (when (<= 2 j n)
                     (format-char ","))
@@ -318,7 +335,6 @@
              for column in lob-columns
              for value in lob-values
              for j from 1
-             unless (member value '(:null nil))
              do (progn
                   (when (<= 2 j n)
                     (format-char ","))
@@ -326,30 +342,15 @@
 
 (def method format-sql-syntax-node ((self sql-update) (database oracle))
   (with-slots (table columns values where) self
-    (flet ((make-lob (column)
-             (etypecase (type-of column)
-               (sql-character-large-object-type (make-instance 'sql-empty-clob))
-               (sql-binary-large-object-type (make-instance 'sql-empty-blob)))))
-      (let ((lob-columns nil)
-            (other-columns nil)
-            (lob-values nil)
-            (other-values nil))
-        (loop
-           for column in columns
-           for value in (when (slot-boundp self 'values) values)
-           do (if (lobp (and (typep column 'sql-column) (type-of column)))
-                  (progn
-                    (push column lob-columns)
-                    (push value lob-values))
-                  (progn
-                    (push column other-columns)
-                    (push value other-values))))
+    (let ((values (and (slot-boundp self 'values) values)))
+      (multiple-value-bind (lob-columns other-columns lob-values other-values)
+          (filter-lob-columns-and-values columns values)
         (format-string "UPDATE ")
         (format-sql-identifier table database)
         (format-string " SET ")
         (loop
            for column in (append other-columns lob-columns)
-           for value in (append other-values (mapcar #'make-lob lob-columns))
+           for value in (append other-values (mapcar #'make-empty-lob-syntax-node lob-columns))
            for n from 0
            do (progn
                 (when (plusp n)
@@ -358,15 +359,13 @@
                 (format-string " = ")
                 (format-sql-syntax-node value database)))
         (format-sql-where where database)
-        (when (and lob-columns
-                   (remove-if (lambda (x) (member x '(:null nil))) lob-values))
+        (when lob-columns
           (format-string " RETURNING ")
           (loop
              for n = (length lob-columns)
              for column in lob-columns
              for value in lob-values
              for j from 1
-             unless (member value '(:null nil))
              do (progn
                   (when (<= 2 j n)
                     (format-char ","))
@@ -377,7 +376,6 @@
              for column in lob-columns
              for value in lob-values
              for j from 1
-             unless (member value '(:null nil))
              do (progn
                   (when (<= 2 j n)
                     (format-char ","))
@@ -515,22 +513,21 @@
                          (value-of right))))
          (if (or xblob yblob)
              (flet ((blob (vector) ;; blob=
-                      (loop
-                         for x across vector
-                         do (format *sql-stream* "~2,'0x" x))))
+                      (if (equalp #() vector)
+                          (format-string "EMPTY_BLOB()")
+                          (progn
+                            (format-string "to_blob('")
+                            (loop
+                               for x across vector
+                               do (format *sql-stream* "~2,'0x" x))
+                            (format-string "')")))))
                (format-string "0=dbms_lob.compare(")
                (if xblob
-                   (progn
-                     (format-string "to_blob('")
-                     (blob xblob)
-                     (format-string "')"))
+                   (blob xblob)
                    (format-sql-syntax-node left database))
                (format-string ",")
                (if yblob
-                   (progn
-                     (format-string "to_blob('")
-                     (blob yblob)
-                     (format-string "')"))
+                   (blob yblob)
                    (format-sql-syntax-node right database))
                (format-string ")"))
              (let ((xclob (and (typep left 'sql-literal)
@@ -544,20 +541,20 @@
                                (stringp (value-of right))
                                (value-of right))))
                (if (or xclob yclob)
-                   (progn ;; clob=
+                   (flet ((clob (string) ;; clob=
+                            (if (equal "" string)
+                                (format-string "EMPTY_CLOB()")
+                                (progn
+                                  (format-string "to_clob('")
+                                  (format-string string)
+                                  (format-string "')")))))
                      (format-string "0=dbms_lob.compare(")
                      (if xclob
-                         (progn
-                           (format-string "to_clob('")
-                           (format-string xclob)
-                           (format-string "')"))
+                         (clob xclob)
                          (format-sql-syntax-node left database))
                      (format-string ",")
                      (if yclob
-                         (progn
-                           (format-string "to_clob('")
-                           (format-string yclob)
-                           (format-string "')"))
+                         (clob yclob)
                          (format-sql-syntax-node right database))
                      (format-string ")"))
                    (progn ;; =
