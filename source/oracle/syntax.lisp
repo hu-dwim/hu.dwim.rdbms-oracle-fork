@@ -141,60 +141,74 @@
   (with-slots
         (distinct columns tables where group-by having order-by offset limit for wait)
       self
-    (flet ((core ()
-             (format-string "SELECT ")
-             (when distinct
-               (format-string "DISTINCT "))
-             (format-comma-separated-list columns database 'format-sql-column-reference)
-             (if tables
-                 (progn
-                   (format-string " FROM ")
-                   (format-comma-separated-list tables database
-                                                'format-sql-table-reference))
-                 (format-string " FROM dual "))
-             (format-sql-where where database)
-             (when group-by
-               (format-string " GROUP BY ")
-               (format-comma-separated-list group-by database))
-             (when having
-               (format-string " HAVING ")
-               (format-sql-syntax-node having database))
-             (when order-by
-               (format-string " ORDER BY ")
-               (format-comma-separated-list order-by database))
-             (when for
-               (format-string " FOR ")
-               (format-string (symbol-name for))
-               (unless wait
-                 (format-string " NOWAIT")))))
+    (labels ((cols (source alias rownum fn)
+               (loop
+                  for column in columns
+                  for i from 0
+                  do (progn
+                       (when (plusp i)
+                         (format-string ","))
+                       (when source
+                         (format-string " ")
+                         (funcall fn column database))
+                       (when alias
+                         (format-string (format nil " c~d" i)))))
+               (when rownum
+                 (format-string ", ROWNUM n")))
+             (format-col (column db)
+               (format-sql-identifier (column-of column) db))
+             (core (alias)
+               (format-string "SELECT")
+               (when distinct
+                 (format-string " DISTINCT"))
+               (cols t alias nil 'format-sql-column-reference)
+               (if tables
+                   (progn
+                     (format-string " FROM ")
+                     (format-comma-separated-list tables database
+                                                  'format-sql-table-reference))
+                   (format-string " FROM dual "))
+               (format-sql-where where database)
+               (when group-by
+                 (format-string " GROUP BY ")
+                 (format-comma-separated-list group-by database))
+               (when having
+                 (format-string " HAVING ")
+                 (format-sql-syntax-node having database))
+               (when order-by
+                 (format-string " ORDER BY ")
+                 (format-comma-separated-list order-by database))
+               (when for
+                 (format-string " FOR ")
+                 (format-string (symbol-name for))
+                 (unless wait
+                   (format-string " NOWAIT")))))
       (cond
         ((and (not limit) (not offset))
-         (core))
+         (core nil))
         ((and limit (not offset))
-         (format-string "SELECT * FROM (")
-         (core)
+         (format-string "SELECT")
+         (cols nil t nil #'format-col)
+         (format-string " FROM (")
+         (core t)
          (format-string ") WHERE ROWNUM <= ")
          (format-sql-syntax-node limit database))
         (t
-         (flet ((cols ()
-                  (format-comma-separated-list
-                   columns database
-                   (lambda (x db) (format-sql-identifier (column-of x) db)))))
-           (format-string "SELECT ")
-           (cols)
-           (format-string " FROM (SELECT ")
-           (cols)
-           (format-string ", ROWNUM \"kaeD8Ot7\" FROM (") ;; name unlikely to clash
-           (core)
-           (format-string ")) WHERE ")
+         (format-string "SELECT")
+         (cols nil t nil #'format-col)
+         (format-string " FROM (SELECT")
+         (cols nil t t #'format-col)
+         (format-string " FROM (")
+         (core t)
+         (format-string ")) WHERE ")
+         (format-sql-syntax-node offset database)
+         (format-string " < n")
+         (when limit
+           (format-string " AND n <= (")
            (format-sql-syntax-node offset database)
-           (format-string " < \"kaeD8Ot7\"")
-           (when limit
-             (format-string " AND \"kaeD8Ot7\" <= (")
-             (format-sql-syntax-node offset database)
-             (format-string " + ")
-             (format-sql-syntax-node limit database)
-             (format-string ")"))))))))
+           (format-string " + ")
+           (format-sql-syntax-node limit database)
+           (format-string ")")))))))
 
 (def function format-sql-column-reference (column database)
   (typecase column
