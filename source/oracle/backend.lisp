@@ -8,7 +8,7 @@
 
 (cffi:define-foreign-library oracle-oci
   (:unix "libocixe.so")
-  (:windows "libocixe.dll")
+  (:windows (:or "ocixe.dll" "oci.dll"))
   (t (:default "libocixe")))
 
 (def special-variable *oracle-oci-foreign-library* nil)
