@@ -60,6 +60,26 @@
    (format-string " AS ")
    (format-sql-syntax-node as)))
 
+;;; We need to distinguish between constraints which can be set up
+;;; during CREATE TABLE and those which require a second ALTER TABLE
+;;; step:
+;;;
+;;; While foreign key constraints are nominally part of the column
+;;; definition, it is not possible to define both together in the case
+;;; where the target table has not been defined yet, meaning that
+;;; ordering matterns and circular references need to be dealt with.
+;;;
+;;; An similar issue would arise for table contents: We need to be able
+;;; to separate out table and constraint definition for data import files,
+;;; where the order must be:
+;;;  1. create table
+;;;  2. insert into / copy
+;;;  3. alter table add foreign key
+;;;
+(defun delay-constraint-until-alter-table-p (constraint)
+  (check-type constraint sql-constraint)
+  (typep constraint 'sql-foreign-key-constraint))
+
 (def syntax-node sql-column (named-sql-syntax-node)
   ((type
     :type sql-type)
@@ -77,6 +97,9 @@
    (when (slot-boundp -self- 'default-value)
      (format-string " DEFAULT ")
      (format-sql-literal default-value))
-   (mapc (lambda (constraint) (format-sql-syntax-node constraint)) constraints))
+   (mapc (lambda (constraint)
+	   (unless (delay-constraint-until-alter-table-p constraint)
+	     (format-sql-syntax-node constraint)))
+	 constraints))
   (:format-sql-identifier
    (format-sql-identifier name)))

@@ -7,10 +7,40 @@
 (in-package :hu.dwim.rdbms)
 
 ;;;;;;
+;;; with-table-export-context
+;;;
+;;; This mechanism allows us to delay parts of CREATE TABLE into later
+;;; ALTER TABLE statements while keeping that process somewhat transparent
+;;; to the caller. 
+
+(def special-variable *delayed-create-table-thunks*)
+
+(defun call-with-table-export-context (fun)
+  (let ((*delayed-create-table-thunks* '()))
+    (multiple-value-prog1
+	(funcall fun)
+      (mapc #'funcall *delayed-create-table-thunks*))))
+
+(defmacro with-table-export-context (&body body)
+  `(call-with-table-export-context (lambda () ,@body)))
+
+(defmacro delay-execute-ddl (form)
+  `(push (lambda () (execute-ddl ,form)) *delayed-create-table-thunks*))
+
+
+;;;;;;
 ;;; Create, drop and alter table
 
 (def (function e) create-table (name columns &key temporary)
-  (execute-ddl (make-instance 'sql-create-table :temporary temporary :name name :columns columns)))
+  (execute-ddl (make-instance 'sql-create-table :temporary temporary :name name :columns columns))
+  (dolist (column columns)
+    (dolist (constraint (constraints-of column))
+      (when (delay-constraint-until-alter-table-p constraint)
+	(let ((constraint constraint))	;closurize
+	  (delay-execute-ddl
+	   (make-instance 'sql-alter-table
+			  :name name
+			  :actions (list (constraint-to-action constraint name)))))))))
 
 (def (function e) create-temporary-table (name &rest columns)
   (execute-ddl (make-instance 'sql-create-table :name name :temporary :drop :columns columns)))
@@ -44,6 +74,12 @@
   (execute-ddl (make-instance 'sql-alter-table
                               :name name
                               :actions (list (make-instance 'sql-add-primary-key-constraint-action :columns columns)))))
+
+
+(def (function e) add-foreign-key-constraint (name add-constraint)
+  (execute-ddl (make-instance 'sql-alter-table
+                              :name name
+                              :actions (list add-constraint))))
 
 ;;;;;;
 ;;; Query tables and columns
@@ -79,6 +115,24 @@
   (:report (lambda (error stream)
              (format stream "Adding the column ~S with type ~A in table ~S is a safe operation"
                      (column-name-of error) (column-type-of error) (table-name-of error)))))
+
+(def (condition* e) unconfirmed-schema-change/add-foreign-key (unconfirmed-schema-change)
+  ((constraint-name))
+  (:report (lambda (error stream)
+             (format stream "Adding a foreign key ~A is a safe operation"
+                     (constraint-name-of error)))))
+
+(def (condition* e) unconfirmed-schema-change/drop-foreign-key (unconfirmed-schema-change)
+  ((constraint-name))
+  (:report (lambda (error stream)
+             (format stream "Dropping a foreign key ~A is a safe operation"
+                     (constraint-name-of error)))))
+
+(def (condition* e) unconfirmed-schema-change/replace-foreign-key (unconfirmed-schema-change)
+  ((constraint-name))
+  (:report (lambda (error stream)
+             (format stream "Replacing a foreign key ~A is a safe operation"
+                     (constraint-name-of error)))))
 
 (def (condition* e) unconfirmed-destructive-schema-change (unconfirmed-schema-change)
   ())
@@ -127,6 +181,13 @@
   (:method (type-1 type-2 database)
            #f))
 
+(defun collect-column-foreign-keys (columns)
+  (iter outer
+	(for column in columns)
+	(iter (for constraint in (constraints-of column))
+	      (when (typep constraint 'sql-foreign-key-constraint)
+		(in outer (collect constraint))))))
+
 (def function update-existing-table (table-name columns)
   (let ((table-columns (list-table-columns table-name)))
     ;; create new columns that are missing from the table
@@ -171,7 +232,68 @@
           (with-simple-restart
               (continue-with-schema-change "DESTRUCTIVE: Drop column ~S in table ~S" column-name table-name)
             (error 'unconfirmed-destructive-schema-change/drop-column :table-name table-name :column-name column-name))
-          (drop-column table-name column-name #t))))))
+          (drop-column table-name column-name #t)))))
+  (update-existing-table-foreign-keys table-name columns))
+
+(defun fkey-actions-same-p (descriptor constraint)
+  (and (eq (update-rule-of descriptor) (update-rule-of constraint))
+       (eq (delete-rule-of descriptor) (delete-rule-of constraint))))
+
+(defun update-existing-table-foreign-keys (table-name columns)
+  (let* ((table-fkeys (list-table-foreign-keys table-name))
+	 (add-actions (mapcar (lambda (c)
+				(constraint-to-action c table-name))
+			      (collect-column-foreign-keys columns))))
+    (dolist (existing table-fkeys)
+      (unless (find (name-of existing)
+		    add-actions
+		    :key #'name-of
+		    :test #'string=)
+	(with-simple-restart (skip "Skip changing this foreign key")
+	  (when *signal-non-destructive-alter-table-commands*
+	    (with-simple-restart
+		(continue-with-schema-change "Alter the table ~S by dropping the foreign key ~S"
+					     table-name
+					     (name-of existing))
+	      (error 'unconfirmed-schema-change/drop-foreign-key
+		     :table-name table-name
+		     :column-name (source-column-of existing)
+		     :constraint-name (name-of existing))))
+	  (drop-foreign-key existing))))
+    (dolist (existing table-fkeys)
+      (let ((match (find (name-of existing)
+			 add-actions
+			 :key #'name-of
+			 :test #'string=)))
+	(when (and match (not (fkey-actions-same-p existing match)))
+	  (with-simple-restart (skip "Skip changing this foreign key")
+	    (when *signal-non-destructive-alter-table-commands*
+	      (with-simple-restart
+		  (continue-with-schema-change "Alter the table ~S by replacing the foreign key ~S"
+					       table-name
+					       (name-of existing))
+		(error 'unconfirmed-schema-change/replace-foreign-key
+		       :table-name table-name
+		       :column-name (source-column-of existing)
+		       :constraint-name (name-of existing))))
+	    (drop-foreign-key existing)
+	    (add-foreign-key-constraint table-name match)))))
+    (dolist (action add-actions)
+      (unless (find (name-of action)
+		    table-fkeys
+		    :key #'name-of
+		    :test #'string=)
+	(with-simple-restart (skip "Skip changing this foreign key")
+	  (when *signal-non-destructive-alter-table-commands*
+	    (with-simple-restart
+		(continue-with-schema-change "Alter the table ~S by adding the foreign key ~S"
+					     table-name
+					     (name-of action))
+	      (error 'unconfirmed-schema-change/add-foreign-key
+		     :table-name table-name
+		     :column-name (car (source-columns-of action))
+		     :constraint-name (name-of action))))
+	  (add-foreign-key-constraint table-name action))))))
 
 ;;;;;;
 ;;; Create, drop view
@@ -260,3 +382,32 @@
   (database-list-table-primary-constraints name *database*))
 
 (def generic database-list-table-primary-constraints (name database))
+
+(def class* foreign-key-descriptor ()
+  ((name)
+   (source-table)
+   (source-column)
+   (target-table)
+   (target-column)
+   (update-rule)
+   (delete-rule)))
+
+(def print-object foreign-key-descriptor
+  (format t "~_CONSTRAINT ~A~_FOREIGN KEY ~A ~A"
+	  (name-of -self-)
+	  (source-table-of -self-)
+	  (list (source-column-of -self-)))
+  (format t " ~_REFERENCES ~A ~A"
+	  (target-table-of -self-)
+	  (list (target-column-of -self-)))
+  (format t " ~_ON DELETE ~S ~_ON UPDATE ~S"
+	  (delete-rule-of -self-)
+	  (update-rule-of -self-)))
+
+(def (function e) list-table-foreign-keys (name)
+  (database-list-table-foreign-keys name *database*))
+
+(def generic database-list-table-foreign-keys (name database))
+
+(defun drop-table-foreign-keys (table)
+  (mapc #'drop-foreign-key (list-table-foreign-keys table)))

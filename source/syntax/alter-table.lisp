@@ -45,9 +45,14 @@
    (format-sql-syntax-node type)))
 
 (def syntax-node sql-add-constraint-action (sql-syntax-node)
-  ()
+  ((name :initform nil
+	 :type (or null string)))
   (:format-sql-syntax-node
-   (format-string "ADD ")))
+   (format-string "ADD ")
+   (when name
+     (format-string "CONSTRAINT ")
+     (format-sql-identifier name)
+     (format-string " "))))
 
 (def syntax-node sql-add-primary-key-constraint-action (sql-add-constraint-action)
   ((columns
@@ -57,3 +62,72 @@
    (format-string "PRIMARY KEY (")
    (format-comma-separated-identifiers columns)
    (format-string ")")))
+
+(def syntax-node sql-add-foreign-key-constraint-action (sql-add-constraint-action)
+  ((source-columns :type list)
+   (target-columns :type list)
+   (target-table :type string)
+   (delete-rule :type foreign-key-action)
+   (update-rule :type foreign-key-action))
+  (:format-sql-syntax-node
+   (call-next-method)
+   (format-string "FOREIGN KEY (")
+   (format-comma-separated-identifiers source-columns)
+   (format-string ") REFERENCES ")
+   (format-sql-identifier target-table)
+   (format-string " (")
+   (format-comma-separated-identifiers target-columns)
+   (format-string  ") ON DELETE ")
+   (format-sql-syntax-node (make-instance 'sql-foreign-key-action
+					  :action delete-rule))
+   (format-string  " ON UPDATE ")
+   (format-sql-syntax-node (make-instance 'sql-foreign-key-action
+					  :action update-rule))))
+
+(def syntax-node sql-drop-constraint-action (sql-syntax-node)
+  ((name :type string))
+  (:format-sql-syntax-node
+   (format-string "DROP CONSTRAINT ")
+   (format-sql-identifier name)))
+
+(defun drop-foreign-key (descriptor)
+  (let ((action
+	 (sql-drop-constraint-action :name (name-of descriptor))))
+    (execute-ddl (make-instance 'sql-alter-table
+				:name (source-table-of descriptor)
+				:actions (list action)))))
+
+;; There is a certain amount of duplication between the classes in
+;; constraint.lisp and those in alter-table.lisp.  Here's a conversion
+;; routine:
+
+(defgeneric constraint-to-action (constraint table-name))
+
+(defmethod constraint-to-action
+    ((constraint sql-primary-key-constraint) table-name)
+  (declare (ignore table-name))
+  (make-instance 'sql-add-primary-key-constraint-action
+		 :columns (list (name-of constraint))))
+
+(defmethod constraint-to-action
+    ((constraint sql-foreign-key-constraint) table-name)
+  (assert (name-of constraint))
+  ;; Note that SQL-FOREIGN-KEY-CONSTRAINT is a named class, and its NAME
+  ;; is the column name, but SQL-ADD-FOREIGN-KEY-CONSTRAINT-ACTION has a
+  ;; NAME slot which holds the constraint name (!).
+  (make-instance 'sql-add-foreign-key-constraint-action
+		 :name (rdbms-name-for
+			(concatenate 'string
+				    "fkey_"
+				    table-name
+				    "_"
+				    (name-of constraint)
+				    "_"
+				    (target-table-of constraint)
+				    "_"
+				    (target-column-of constraint)))
+		 :source-columns (list (name-of constraint))
+		 :target-table (target-table-of constraint)
+		 :target-columns (list (target-column-of constraint))
+		 :delete-rule (delete-rule-of constraint)
+		 :update-rule (update-rule-of constraint)))

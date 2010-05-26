@@ -61,3 +61,50 @@
   (remove-if-not (lambda (x) (search "pkey" x))
                  (list-table-indices name)
                  :key #'name-of))
+
+(defun sql-rule-name-to-lisp (str)
+  (let ((sym (find-symbol (string-upcase str) :keyword)))
+    (case sym
+      (:no\ action :defer-restrict)
+      (:set\ null :set-null)
+      (:set\ default :set-default)
+      ((:cascade :restrict) sym)
+      (t (error "invalid action: ~A" str)))))
+
+(def method database-list-table-foreign-keys (table-name (database postgresql))
+  (map 'list
+       (lambda (row)
+	 (make-instance 'foreign-key-descriptor
+			:name (elt row 0)
+			:source-table (elt row 1)
+			:source-column (elt row 2)
+			:target-table (elt row 3)
+			:target-column (elt row 4)
+			:delete-rule (sql-rule-name-to-lisp (elt row 5))
+			:update-rule (sql-rule-name-to-lisp (elt row 6))))
+       (execute
+	(format nil "SELECT DISTINCT
+                  tc.constraint_name,
+                  tc.table_name,
+                  kcu.column_name, 
+                  ccu.table_name AS foreign_table_name,
+                  ccu.column_name AS foreign_column_name,
+                  rc.delete_rule,
+                  rc.update_rule
+                FROM
+                  information_schema.table_constraints AS tc 
+                  JOIN information_schema.key_column_usage AS kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                    AND tc.constraint_catalog = kcu.constraint_catalog
+                  JOIN information_schema.constraint_column_usage AS ccu
+                    ON ccu.constraint_name = tc.constraint_name
+                    AND ccu.constraint_catalog = tc.constraint_catalog
+                  JOIN information_schema.referential_constraints AS rc
+                    ON rc.constraint_name = tc.constraint_name
+                    AND rc.constraint_catalog = tc.constraint_catalog
+                WHERE constraint_type = 'FOREIGN KEY'
+                  AND tc.constraint_catalog='~A'
+                  AND tc.table_name='~A';"
+		(getf (connection-specification-of *database*)
+		      :database)
+		(string-downcase table-name)))))

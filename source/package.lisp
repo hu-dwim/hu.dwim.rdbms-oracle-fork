@@ -73,7 +73,24 @@
            #:column-value
            #:for-each-row
            #:collect-rows
-           #:current-row)
+           #:current-row
+
+	   #:sql-create-table
+	   #:sql-create-index
+	   #:sql-create-view
+	   #:sql-foreign-key-constraint
+	   #:sql-add-foreign-key-constraint-action
+	   #:constraints-of
+	   #:delay-constraint-until-alter-table-p
+	   #:with-table-export-context
+	   #:constraint-to-action
+	   #:list-table-foreign-keys
+	   #:database-list-table-foreign-keys
+	   #:sql-drop-constraint-action
+	   #:foreign-key-descriptor
+	   #:drop-foreign-key
+	   #:drop-table-foreign-keys
+	   #:*signal-non-destructive-alter-table-commands*)
   (:readtable-setup
    (hu.dwim.util:enable-standard-hu.dwim-syntaxes)
    (hu.dwim.syntax-sugar:enable-lambda-with-bang-args-syntax)))
