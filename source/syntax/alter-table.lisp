@@ -77,11 +77,13 @@
    (format-sql-identifier target-table)
    (format-string " (")
    (format-comma-separated-identifiers target-columns)
-   (format-string  ") ON DELETE ")
+   (format-string  ") ")
    (format-sql-syntax-node (make-instance 'sql-foreign-key-action
+					  :event :delete
 					  :action delete-rule))
-   (format-string  " ON UPDATE ")
+   (format-string  " ")
    (format-sql-syntax-node (make-instance 'sql-foreign-key-action
+					  :event :update
 					  :action update-rule))))
 
 (def syntax-node sql-drop-constraint-action (sql-syntax-node)

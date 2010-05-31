@@ -629,3 +629,28 @@
 
 (def method format-sql-syntax-node ((x hu.dwim.rdbms::sql-false-expression) (database oracle)) ;; TODO THL export sql-false-expression
   (format-string "1 = 2"))
+
+(def method format-sql-syntax-node ((x sql-foreign-key-action) (database oracle))
+  (with-slots (event action) x
+    (ecase event
+      (:update)				;unsupported
+      (:delete
+       (ecase action
+	 ((:restrict :defer-restrict)
+	  ;; c.f. the oracle version of SQL-RULE-NAME-TO-LISP:
+	  ;;
+	  ;; Oracle doesn't have RESTRICT, only NO ACTION, and the latter
+	  ;; is the default.  It's not possible to specify it explicitly,
+	  ;; so if we want this default, we write no rule at all.
+	  ;;
+	  ;; We also pretend that :defer-restrict and :restrict are the
+	  ;; same.
+	  )
+	 (:set-null
+	  (format-string "ON DELETE SET NULL"))
+	 (:set-default
+	  (warn "ON DELETE SET DEFAULT not supported by ORACLE, using ~
+                 SET NULL instead")
+	  (format-string "ON DELETE SET NULL"))
+	 (:cascade
+	  (format-string "ON DELETE CASCADE")))))))
