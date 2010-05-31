@@ -49,10 +49,16 @@
   ((original-error)))
 
 (def condition* simple-rdbms-error (simple-error)
-  ())
+  ((error-code :initarg :error-code 
+			:initform nil :reader simple-rdbms-error-code)
+   (message :initarg :error-message :accessor simple-rdbms-error-message)) 
+  (:report (lambda (err stream)
+	     (format stream "simple rdbms error: ~@[[~A~]]: ~@[~A~]"
+		     (simple-rdbms-error-code err)
+		     (simple-rdbms-error-message err)))))
 
-(def function simple-rdbms-error (message &rest args)
-  (error 'simple-rdbms-error :format-control message :format-arguments args))
+(def function simple-rdbms-error (message &optional error-code &rest args)
+  (error 'simple-rdbms-error :error-code error-code :error-message message))
 
 (def (condition* e) unable-to-obtain-lock-error (translated-rdbms-error simple-rdbms-error)
   ())

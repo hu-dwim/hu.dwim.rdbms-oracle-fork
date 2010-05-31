@@ -80,10 +80,10 @@
                      error-code
                      error-buffer
                      oci:+error-maxmsg-size+ oci:+htype-error+)
-
-      (let ((error-message (oci-string-to-lisp error-buffer)))
+      (let ((error-message (oci-string-to-lisp error-buffer))
+	    (code (cffi:mem-ref error-code 'oci:sb-4)))
         (rdbms.error "Signalling error: ~A" error-message)
-        (simple-rdbms-error "RDBMS error: ~A" error-message)))))
+        (simple-rdbms-error error-message code)))))
 
 
 (def constant +maximum-rdbms-name-length+ 30)
