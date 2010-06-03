@@ -55,7 +55,8 @@
     (#.oci:+no-data+
      (simple-rdbms-error "OCI No data found"))
     (#.oci:+success-with-info+
-     (simple-rdbms-error "Internal error: unexpected oci:+success-with-info+"))
+     #+nil(simple-rdbms-error "Internal error: unexpected oci:+success-with-info+")
+     result)
     (#.oci:+invalid-handle+
      (simple-rdbms-error "OCI Invalid handle"))
     (#.oci:+need-data+
