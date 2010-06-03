@@ -147,3 +147,5 @@
             (list (push (nreverse row) result))))
     (when (eq result-type 'list)
       (setf result (nreverse result)))))
+
+(def method backend-type ((db sqlite)) :sqlite)

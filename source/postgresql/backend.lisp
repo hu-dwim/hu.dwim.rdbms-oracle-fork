@@ -146,3 +146,5 @@
 
 (def method backend-release-savepoint (name (db postgresql))
   (execute (format nil "RELEASE SAVEPOINT ~a" name)))
+
+(def method backend-type ((db postgresql)) :postgresql)

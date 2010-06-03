@@ -92,6 +92,8 @@
            #:drop-table-foreign-keys
            #:*signal-non-destructive-alter-table-commands*
 
+           #:backend-type
+
            #:simple-rdbms-error
            #:simple-rdbms-error-code
            #:simple-rdbms-error-message)
