@@ -17,6 +17,9 @@
 (def constant +maximum-rdbms-name-length+ 63)
 
 ;; this name mapping is not injective, different lisp names _may_ be mapped to the same rdbms name
-(def method calculate-rdbms-name ((db postgresql) thing name)
+(def method calculate-rdbms-name ((db (eql :postgresql)) thing name)
   "Cuts off the end of names that are too long and appends the hash of the original name."
   (calculate-rdbms-name-with-utf-8-length-limit name +maximum-rdbms-name-length+ :prefix "_"))
+
+(def method calculate-rdbms-name ((db postgresql) thing name)
+  (calculate-rdbms-name :postgresql thing name))
