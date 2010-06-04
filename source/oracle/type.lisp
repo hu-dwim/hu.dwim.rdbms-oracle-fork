@@ -226,7 +226,7 @@
          string/string))
     (#.oci:+sqlt-num+
      (if (and (<= scale 0) (<= (- precision scale) 9))
-         integer/int32
+         integer/varnum
          rational/varnum))
     (#.oci:+sqlt-dat+ local-time/date)
     (#.oci:+sqlt-ibfloat+ float/bfloat)
