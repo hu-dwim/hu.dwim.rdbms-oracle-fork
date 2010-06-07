@@ -1,4 +1,4 @@
-pristine:0000001842-87d9842aa635761800e07a486c27c19822540def2a249ad7013a7444d7a32d2e
+pristine:0000001842-91bb75fe53656a42615b7627d60b1c94140a9941ccf9922ccd6e7c99dc8309ad
 Starting with inventory:
 0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
 [TAG 2008-11-27
@@ -919,3 +919,33 @@ tomas.hlavaty@knowledgetools.de**20100519113656
  Ignore-this: c44d28a5cbf6019ecbcfc3e88806e627
 ] 
 hash: 0000004874-b69932a3981b24f6e102789fac484af568c2909eee0227e377f65730b7cebdc7
+[s/int32/varnum/ in typemap-for-internal-type to fix ORA-01455
+tomas.hlavaty@knowledgetools.de**20100607131009
+ Ignore-this: ddc28353e2ff47cdd5bd3e3da82abbf4
+] 
+hash: 0000000243-cf2848196a7310d1758a8ea5ffe93024232792e77289b13b609952d003396984
+[calculate-rdbms-name dispatches on keyword argument too
+tomas.hlavaty@knowledgetools.de**20100607132919
+ Ignore-this: 592befb60f694c7c5fe0b65ee17967be
+] 
+hash: 0000000793-7afd67ce405c6ff2ca1c0baad55433240ef3a97f965a546e95c6b634c5299718
+[oci:+success-with-info+ is success too
+tomas.hlavaty@knowledgetools.de**20100607133049
+ Ignore-this: 55611ee3425baeff512d2ab3f8035de8
+] 
+hash: 0000000354-87864776bf29697ae90339f1ea82b9758952b10abb0ff73b02c6ae07913b6dcd
+[backend-type method returning keyword added
+tomas.hlavaty@knowledgetools.de**20100607133404
+ Ignore-this: 98fa617bda9cef17429ccf3a6f6eb25a
+] 
+hash: 0000000421-f583c7f963fc3a2700ab7f49b17dddb98153382685207549075c396e36ec1345
+[error-code and message slots added to simple-rdbms-error
+jan.idzikowski@knowledgetools.de**20100607134111
+ Ignore-this: 280b490ad041a1867f22929e4c58a9d9
+] 
+hash: 0000001247-5d357e5fa489a3b062dace764f76c3fda0fcadce93d7431ede2c31f4f82a3aa1
+[foreign constraints implemented
+david.lichteblau@knowledgetools.de**20100607135303
+ Ignore-this: 3a8ae5316c17794202dac8b03f0cbf91
+] 
+hash: 0000017679-5c9e0e9797e1a0ef3de7bb572677ca1185d248e43278f8c683b8062748defda8
