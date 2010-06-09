@@ -111,22 +111,38 @@
     (declare (ignore database transaction))
     (funcall function)))
 
-(def (with-macro* e) with-transaction* (&rest args &key (default-terminal-action :commit) database &allow-other-keys)
+(def (function e) abandon-and-recreate-transaction ()
+  (declare (special *transaction-creator*))
+  (hu.dwim.rdbms::assert-transaction-in-progress)
+  (setq hu.dwim.rdbms::*transaction*
+        (funcall hu.dwim.rdbms::*transaction-creator*))
+  (values))
+
+(def (with-macro* e) with-transaction*
+  (&rest args &key (default-terminal-action :commit) database take-over
+         &allow-other-keys)
   "Evaluates FORMS within the dynamic scope of a new TRANSACTION."
   (unless (or database (boundp '*database*))
     (error "Cannot start transaction because database was not provided, either use WITH-DATABASE or provide a database to WITH-TRANSACTION*"))
   (bind ((*database* (or database *database*))
          (*transaction* nil)
-         (body-finished? #f))
+         (body-finished? #f)
+         (*transaction-creator*
+          (let ((db *database*)
+                (ta default-terminal-action)
+                (ar (remove-from-plist args
+                                       :database
+                                       :default-terminal-action
+                                       :take-over)))
+            (lambda ()
+              (apply 'make-transaction db :terminal-action ta ar)))))
+    (declare (special *transaction-creator*))
     (iter restart-transaction-loop
        (with-simple-restart (restart-transaction "rollback the transaction by unwinding the stack and restart the WITH-TRANSACTION block in a new database transaction")
          (unwind-protect
               (progn
                 (setf body-finished? #f)
-                (setf *transaction*
-                      (apply 'make-transaction *database*
-                             :terminal-action default-terminal-action
-                             (remove-from-plist args :database :default-terminal-action)))
+                (setq *transaction* (or take-over (funcall *transaction-creator*)))
                 (return-from restart-transaction-loop
                   (multiple-value-prog1
                       (restart-case
