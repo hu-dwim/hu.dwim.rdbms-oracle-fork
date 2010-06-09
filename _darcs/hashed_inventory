@@ -1,4 +1,4 @@
-pristine:0000001842-91bb75fe53656a42615b7627d60b1c94140a9941ccf9922ccd6e7c99dc8309ad
+pristine:0000001842-8176997ed03dad36eda9ef187a40e9d5a0d7cbc5c756c50e80b1902b2826eeac
 Starting with inventory:
 0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
 [TAG 2008-11-27
@@ -949,3 +949,8 @@ david.lichteblau@knowledgetools.de**20100607135303
  Ignore-this: 3a8ae5316c17794202dac8b03f0cbf91
 ] 
 hash: 0000017679-5c9e0e9797e1a0ef3de7bb572677ca1185d248e43278f8c683b8062748defda8
+[allow transfering transactions between w/tx scopes, e.g. in other thread
+tomas.hlavaty@knowledgetools.de**20100609160059
+ Ignore-this: 62207a8ddb5bd043e3050c63a6be975f
+] 
+hash: 0000001694-4b03cfa44d30e22121916180443c9b8609687aebf3c781d75afb5999e9076a44
