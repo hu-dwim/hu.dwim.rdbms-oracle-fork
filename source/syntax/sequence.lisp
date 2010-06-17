@@ -51,3 +51,20 @@
    (format-string "CURRVAL('")
    (format-sql-identifier name)
    (format-string "')")))
+
+(def syntax-node sql-sequence-setval (sql-syntax-node)
+  ((name
+    :type string)
+   (value
+    :type integer)
+   (currentp
+    :type boolean))
+  (:documentation "SQL SEQUENCE setter.")
+  (:format-sql-syntax-node
+   (format-string "SETVAL('")
+   (format-sql-identifier name)
+   (format-string "',")
+   (format-sql-literal value)
+   (format-string ",")
+   (format-sql-literal currentp)
+   (format-string ")")))

@@ -353,6 +353,9 @@
 (def (function e) sequence-current (name)
   (first-elt (first-elt (execute (make-instance 'sql-select :columns (list (make-instance 'sql-sequence-currval-column :name name)))))))
 
+(def (function e) set-sequence-value (name value &optional (currentp t))
+  (first-elt (first-elt (execute (make-instance 'sql-select :columns (list (make-instance 'sql-sequence-setval :name name :value value :currentp currentp)))))))
+
 ;;;;;;
 ;;; Create, drop index
 
