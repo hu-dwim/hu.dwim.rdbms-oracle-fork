@@ -42,3 +42,12 @@
    (format-string "NEXTVAL('")
    (format-sql-identifier name)
    (format-string "')")))
+
+(def syntax-node sql-sequence-currval-column (sql-syntax-node)
+  ((name
+    :type string))
+  (:documentation "An SQL SEQUENCE current value column.")
+  (:format-sql-syntax-node
+   (format-string "CURRVAL('")
+   (format-sql-identifier name)
+   (format-string "')")))
