@@ -103,3 +103,12 @@
 	 constraints))
   (:format-sql-identifier
    (format-sql-identifier name)))
+
+(def syntax-node sql-add-oid-column-default (sql-ddl-statement)
+  ((table-name
+    :type sql-identifier*)
+   (column-name
+    :type sql-identifier*)
+   (class-id
+    :type integer))
+  (:documentation "An SQL ALTER TABLE statement to add a sequence-provided default value to the oid column."))

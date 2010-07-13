@@ -476,6 +476,23 @@
         (format-string "DROP SEQUENCE ")
         (format-sql-identifier (name-of x) database))))
 
+(def method format-sql-syntax-node ((node sql-add-oid-column-default)
+				    (database oracle))
+  (with-slots (table-name column-name class-id)
+      node
+    (format *sql-stream*
+	    "CREATE OR REPLACE TRIGGER \"~a\" BEFORE INSERT ON \"~a\" FOR EACH ROW BEGIN SELECT (CASE WHEN :new.\"~A\" IS NULL THEN ((\"_instance_id\".NEXTVAL * power(2,~a)) + ~a) ELSE :new.\"~A\" END) into :new.\"~A\" FROM dual; END;"
+	    (hu.dwim.rdbms::calculate-rdbms-name
+	     database
+	     :trigger
+	     (concatenate 'string table-name "_t"))
+	    table-name
+	    column-name
+	    hu.dwim.perec::+oid-class-id-bit-size+
+	    class-id
+	    column-name
+	    column-name)))
+
 ;; TODO THL class for each operator for easier dispatch?
 (def method format-sql-syntax-node ((x sql-unary-operator) (database oracle))
   (with-slots (name expression) x
