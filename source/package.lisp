@@ -92,6 +92,7 @@
            #:drop-foreign-key
            #:drop-table-foreign-keys
            #:*signal-non-destructive-alter-table-commands*
+	   #:oid-default-statement-of
 
            #:backend-type
 

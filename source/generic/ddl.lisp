@@ -34,6 +34,9 @@
 (def (function e) create-table (name columns &key temporary)
   (execute-ddl (make-instance 'sql-create-table :temporary temporary :name name :columns columns))
   (dolist (column columns)
+    (with-slots (oid-default-statement) column
+      (when oid-default-statement
+	(delay-execute-ddl oid-default-statement)))
     (dolist (constraint (constraints-of column))
       (when (delay-constraint-until-alter-table-p constraint)
 	(let ((constraint constraint))	;closurize

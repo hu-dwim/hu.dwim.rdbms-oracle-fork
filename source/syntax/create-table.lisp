@@ -87,7 +87,11 @@
     nil
     :type list)
    (default-value
-    :type t))
+    :type t)
+   (oid-default-statement		;always delayed as alter table
+    nil
+    :type (or null sql-add-oid-column-default)
+    :accessor oid-default-statement-of))
   (:documentation "An SQL column specification.")
   (:format-sql-syntax-node
    (format-sql-identifier name)
