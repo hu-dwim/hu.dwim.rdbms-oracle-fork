@@ -51,7 +51,14 @@
     (remove name
 	    (database-list-tables-and-foreign-keys database)
 	    :key #'source-table-of
-	    :test-not #'equal)))
+	    :test-not #'equal))
+  (defcache database-list-view-definitions ())
+  (defcache database-view-definition (name)
+    (second
+     (find name
+	   (database-list-view-definitions database)
+	   :key #'car
+	   :test #'string=))))
 
 ;; FIXME?  These functions return only object names accessible without
 ;; qualification by a schema name.  For use by Perec that is fine,
@@ -73,6 +80,17 @@
   (mapcar #'first (execute (format nil "select view_name from all_views where owner='~A'"
 				   (database-effective-schema database))
 			   :result-type 'list)))
+
+(def method database-list-view-definitions ((database oracle))
+  (execute (format nil "select view_name, dbms_metadata.get_ddl('VIEW',view_name, owner) from all_views where owner='~A'"
+		   (database-effective-schema database))
+	   :result-type 'list))
+
+(def method database-view-definition (view-name (database oracle))
+  (caar (execute (format nil "select dbms_metadata.get_ddl('VIEW',view_name,owner) from all_views where view_name='~A' and owner='~A'"
+			 view-name
+		   (database-effective-schema database))
+	   :result-type 'list)))
 
 (def method database-list-triggers ((database oracle))
   ;; Must be all_triggers, not all_objects, because triggers in a different

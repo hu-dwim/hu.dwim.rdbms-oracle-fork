@@ -108,3 +108,12 @@
 		(getf (connection-specification-of *database*)
 		      :database)
 		(string-downcase table-name)))))
+
+(def method database-list-view-definitions ((database postgresql))
+  (execute "select viewname, definition from pg_views"
+	   :result-type 'list))
+
+(def method database-view-definition (view-name (database postgresql))
+  (caar (execute (format nil "select definition from pg_views where viewname='~A'"
+			 view-name)
+		 :result-type 'list)))
