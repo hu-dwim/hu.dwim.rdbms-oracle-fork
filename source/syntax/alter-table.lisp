@@ -84,7 +84,8 @@
    (format-string  " ")
    (format-sql-syntax-node (make-instance 'sql-foreign-key-action
 					  :event :update
-					  :action update-rule))))
+					  :action update-rule))
+   (format-string  " DEFERRABLE INITIALLY IMMEDIATE")))
 
 (def syntax-node sql-drop-constraint-action (sql-syntax-node)
   ((name :type string))
