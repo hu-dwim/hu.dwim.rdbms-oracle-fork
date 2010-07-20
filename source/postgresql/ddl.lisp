@@ -71,6 +71,58 @@
       ((:cascade :restrict) sym)
       (t (error "invalid action: ~A" str)))))
 
+;; PostgreSQL has a definition for constraint_column_usage which filters
+;; data on ownership, causing problems when connecting as a different
+;; user.  Here's the view definition without the problematic WHERE:
+;;
+(defparameter *information_schema.constraint_column_usage*
+  "SELECT current_database()::information_schema.sql_identifier AS table_catalog,
+       x.tblschema::information_schema.sql_identifier AS table_schema,
+       x.tblname::information_schema.sql_identifier AS table_name,
+       x.colname::information_schema.sql_identifier AS column_name,
+       current_database()::information_schema.sql_identifier
+         AS constraint_catalog,
+       x.cstrschema::information_schema.sql_identifier AS constraint_schema,
+       x.cstrname::information_schema.sql_identifier AS constraint_name
+FROM(SELECT DISTINCT nr.nspname, r.relname, r.relowner, a.attname, nc.nspname,
+       c.conname
+     FROM pg_namespace nr,
+          pg_class r,
+          pg_attribute a,
+          pg_depend d,
+          pg_namespace nc,
+          pg_constraint c
+     WHERE nr.oid = r.relnamespace
+       AND r.oid = a.attrelid
+       AND d.refclassid = 'pg_class'::regclass::oid
+       AND d.refobjid = r.oid
+       AND d.refobjsubid = a.attnum
+       AND d.classid = 'pg_constraint'::regclass::oid
+       AND d.objid = c.oid
+       AND c.connamespace = nc.oid
+       AND c.contype = 'c'::\"char\"
+       AND r.relkind = 'r'::\"char\"
+       AND NOT a.attisdropped
+   UNION ALL 
+     SELECT nr.nspname, r.relname, r.relowner, a.attname, nc.nspname, c.conname
+     FROM pg_namespace nr,
+     	  pg_class r,
+	  pg_attribute a,
+	  pg_namespace nc,
+	  pg_constraint c
+     WHERE nr.oid = r.relnamespace
+       AND r.oid = a.attrelid
+       AND nc.oid = c.connamespace
+       AND CASE
+             WHEN c.contype = 'f'::\"char\" THEN
+                  r.oid = c.confrelid AND (a.attnum = ANY (c.confkey))
+             ELSE r.oid = c.conrelid AND (a.attnum = ANY (c.conkey))
+             END
+           AND NOT a.attisdropped
+	   AND (c.contype = ANY (ARRAY['p'::\"char\", 'u'::\"char\", 'f'::\"char\"]))
+	   AND r.relkind = 'r'::\"char\")
+   x(tblschema, tblname, tblowner, colname, cstrschema, cstrname)")
+
 (def method database-list-table-foreign-keys (table-name (database postgresql))
   (map 'list
        (lambda (row)
@@ -96,7 +148,7 @@
                   JOIN information_schema.key_column_usage AS kcu
                     ON tc.constraint_name = kcu.constraint_name
                     AND tc.constraint_catalog = kcu.constraint_catalog
-                  JOIN information_schema.constraint_column_usage AS ccu
+                  JOIN (~A) AS ccu
                     ON ccu.constraint_name = tc.constraint_name
                     AND ccu.constraint_catalog = tc.constraint_catalog
                   JOIN information_schema.referential_constraints AS rc
@@ -105,6 +157,7 @@
                 WHERE constraint_type = 'FOREIGN KEY'
                   AND tc.constraint_catalog='~A'
                   AND tc.table_name='~A';"
+		*information_schema.constraint_column_usage*
 		(getf (connection-specification-of *database*)
 		      :database)
 		(string-downcase table-name)))))
