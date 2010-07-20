@@ -34,6 +34,9 @@
 (def (function e) create-table (name columns &key temporary)
   (execute-ddl (make-instance 'sql-create-table :temporary temporary :name name :columns columns))
   (dolist (column columns)
+    (with-slots (oid-default-statement) column
+      (when oid-default-statement
+	(delay-execute-ddl oid-default-statement)))
     (dolist (constraint (constraints-of column))
       (when (delay-constraint-until-alter-table-p constraint)
 	(let ((constraint constraint))	;closurize
@@ -328,6 +331,18 @@
 
 (def generic database-list-dependent-views (table column database)
   (:documentation "Returns the list of view names that depends on the specified column."))
+
+(def (function e) list-view-definitions ()
+  (database-list-view-definitions *database*))
+
+(def (function e) view-definition (name)
+  (database-view-definition name *database*))
+
+(def (generic e) database-list-view-definitions (database)
+  (:documentation "Returns the list of view names and definitions present in the database."))
+
+(def (generic e) database-view-definition (view-name database)
+  (:documentation "Returns the view's definition present in the database."))
 
 ;;;;;;
 ;;; Create, drop sequence

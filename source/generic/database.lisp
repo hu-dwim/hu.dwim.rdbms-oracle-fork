@@ -22,7 +22,10 @@
     :documentation "Transactions will be instances of this class. This class is created according to the generic method transaction-mixin-class.")
    (encoding
     :utf-8
-    :type (member :utf-8 :us-ascii))))
+    :type (member :utf-8 :us-ascii))
+   (ddl-query-cache
+    nil
+    :type (or hash-table null))))
 
 (def (constant e) +database-command-line-options+
   '((("database-host" #\Space)
@@ -129,3 +132,13 @@
           (setf name-as-string
                 (string+ name-as-string (format nil "~8,'0X" hash)))))
       name-as-string)))
+
+(def (function e) enable-ddl-query-cache (database)
+  (setf (ddl-query-cache-of database) (make-hash-table)))
+
+(def (function e) disable-ddl-query-cache (database)
+  (setf (ddl-query-cache-of database) nil))
+
+(def (function e) clear-ddl-query-cache (database)
+  (disable-ddl-query-cache database)
+  (enable-ddl-query-cache database))

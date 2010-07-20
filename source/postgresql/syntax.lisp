@@ -12,6 +12,16 @@
   (format-char " ")
   (format-sql-syntax-node (type-of action) database))
 
+(def method format-sql-syntax-node ((node sql-add-oid-column-default)
+				    (database postgresql))
+  (with-slots (class-id table-name column-name) node
+      (format *sql-stream*
+	      "ALTER TABLE ~A ALTER COLUMN ~A SET DEFAULT ((NEXTVAL('_instance_id') << ~D) | ~D)"
+	      table-name
+	      column-name
+	      hu.dwim.perec::+oid-class-id-bit-size+
+	      class-id)))
+
 (def method format-sql-literal ((literal vector) (database postgresql))
   (format-string "E'")
   (loop for el across literal

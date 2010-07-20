@@ -19,7 +19,8 @@
    (error-handle nil :accessor error-handle-pointer)
    (server-handle nil :accessor server-handle-pointer)
    (service-context-handle nil :accessor service-context-handle-pointer)
-   (session-handle nil :accessor session-handle-pointer)))
+   (session-handle nil :accessor session-handle-pointer)
+   (session-schema nil :accessor session-schema)))
 
 (macrolet ((def (&rest names)
                `(progn
@@ -96,3 +97,8 @@
 
 (def method calculate-rdbms-name ((db oracle) thing name)
   (calculate-rdbms-name :oracle thing name))
+
+(defun database-effective-schema (db)
+  (destructuring-bind (&key schema user-name &allow-other-keys)
+      (connection-specification-of db)
+    (string-upcase (or schema user-name))))
