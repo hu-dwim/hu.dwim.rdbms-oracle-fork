@@ -1,4 +1,4 @@
-pristine:0000001842-8176997ed03dad36eda9ef187a40e9d5a0d7cbc5c756c50e80b1902b2826eeac
+pristine:0000001842-68cd1a4d53b82e4f9c9be7ccddb4a61dbf7d2c4a322bf8ef84ca544be0ee56e0
 Starting with inventory:
 0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
 [TAG 2008-11-27
@@ -954,3 +954,74 @@ tomas.hlavaty@knowledgetools.de**20100609160059
  Ignore-this: 62207a8ddb5bd043e3050c63a6be975f
 ] 
 hash: 0000001694-4b03cfa44d30e22121916180443c9b8609687aebf3c781d75afb5999e9076a44
+[Workaround/Optimization: Cache schema introspection on Oracle
+david@knowledgetools.de**20100802113108
+ 
+ ... the cache is a property of the database, but takes effect only under
+ certain conditions
+ 
+ ... one condition is that the backend actively uses it, and only the Oracle
+ backend does so
+ 
+ ... the other condition is that it needs to be enable explicitly, and only
+ export-to-rdbms enables it
+ 
+ ... the way export-to-rdbms usually operates, it is okay to fetch the schema
+ only once at the beginning, so there are not cache invalidation issues to
+ consider.  (Things might be different once users get an export error and
+ starts handling it using a restart though.)
+] 
+hash: 0000003358-abb1eac0641cbe8c3c5742c2aa84623c01ce8b8b044524e817fac3cb0e423333
+[Combined patch for various schema introspection changes
+david@knowledgetools.de**20100802113547
+ 
+ ... includes new schema introspection methods
+ 
+ ... includes support methods needed for the cache on Oracle
+ 
+ ... takes care to distinguish between DB schema name and DB user name
+] 
+hash: 0000010010-f07450050d0610be251f1cd9e603605eb7493dd2b86f10c00a82d064432a50cb
+[Perec: Compute default values for the _oid column
+david@knowledgetools.de**20100802113705
+     
+ ... allowing non-perec code to insert new rows into tables managed by
+ perec easily without having to worry about OID computation
+     
+ On PostgreSQL, this is easily done using DEFAULT.
+     
+ ... on Oracle, using a trigger...
+] 
+hash: 0000002326-74eaf1240202f625378a40bde1a82088ab6df6718568b54388c7b4f7a8108df4
+[New functions database-list-view-definitions, database-view-definition
+david@knowledgetools.de**20100802114049
+ 
+ Asks the DB to return a (reconstructed) view query.
+] 
+hash: 0000000689-a65b8f6c4ba95cf88cc6c638765f80b1f506823e216912c764d72a9a47565483
+[New functions set-sequence-value, sequence-current
+david@knowledgetools.de**20100802114204] 
+hash: 0000001290-df99d55e704a39fd5a7efac518cce9c9729324a8ad3178fee0491a500106352c
+[Distinguish between DB user and DB schema name
+david@knowledgetools.de**20100802114302
+ 
+ ... helper function database-effective-schema
+ 
+ ... for oracle, now keyword SCHEMA in the connection spec
+ 
+ ... default to the user name
+] 
+hash: 0000001316-8ff7d9df85d67d2e510cc6246a94e962313920265d3b8c57967fbbbc4aaf00a4
+[New function commit-and-recreate-transaction
+david@knowledgetools.de**20100802114400] 
+hash: 0000000350-2cfebbcda9e87877bc2f1009fbcb8a3ac48aa9009c13d390163be780d6eb9143
+[Fix DLL names for Oracle on Windows
+david@knowledgetools.de**20100802114447] 
+hash: 0000000185-b190294c3fdea97e93aa7d5b5d5a7ef60532f36387cbfbd0459654fabef0e78d
+[Declare constraints as DEFERRABLE INITIALLY IMMEDIATE
+david@knowledgetools.de**20100802115431
+ 
+ ... meaning unchanged default behaviour, but user code is allowed to defer
+ constraints if it wants to.
+] 
+hash: 0000000363-6328b8a29642caffb7ef7f6eab22d344a03544c7cf19502066d225ca2d546314
