@@ -56,7 +56,7 @@
 			:initform nil :reader simple-rdbms-error-code)
    (message :initarg :error-message :accessor simple-rdbms-error-message)) 
   (:report (lambda (err stream)
-	     (format stream "simple rdbms error: ~@[[~A~]]: ~@[~A~]"
+	     (format stream "simple rdbms error: ~@[[~A]~]: ~@[~A~]"
 		     (simple-rdbms-error-code err)
 		     (simple-rdbms-error-message err)))))
 
