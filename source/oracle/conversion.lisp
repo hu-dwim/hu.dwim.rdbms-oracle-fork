@@ -475,6 +475,12 @@ digit is the first or NIL for 0."
     (if (and (= minutes 0)
              (= hours 0))
         +utc-zone+
-        (local-time::make-timezone :subzones `((,offset-in-sec nil "anonymous" nil nil))
-                                   :name "anonymous"
-                                   :loaded t))))
+        (let ((subzone (local-time::make-subzone
+                        :offset hours
+                        :daylight-p nil ;; TODO THL what should be here?
+                        :abbrev "anonymous")))
+          (local-time::make-timezone
+           :subzones (make-array 1 :initial-contents (list subzone))
+           :path nil
+           :name "anonymous"
+           :loaded t)))))
