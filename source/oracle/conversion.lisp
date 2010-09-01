@@ -476,7 +476,7 @@ digit is the first or NIL for 0."
              (= hours 0))
         +utc-zone+
         (let ((subzone (local-time::make-subzone
-                        :offset hours
+                        :offset (* hours 60 60)
                         :daylight-p nil ;; TODO THL what should be here?
                         :abbrev "anonymous")))
           (local-time::make-timezone
