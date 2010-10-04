@@ -13,6 +13,7 @@
    (table-name
     :type sql-identifier*)
    (columns
+    ;; allows columns or full expressions (if the database supports that)
     nil
     :type list))
   (:documentation "An SQL index specification."))
@@ -29,7 +30,14 @@
    (format-string " ON ")
    (format-sql-identifier table-name)
    (format-string " (")
-   (format-comma-separated-identifiers columns)
+   (format-comma-separated-list
+    columns
+    (lambda (node db)
+      (funcall (typecase node
+		 (sql-column 'format-sql-identifier)
+		 (t 'format-sql-syntax-node))
+	       node
+	       db)))
    (format-char ")")))
 
 (def syntax-node sql-drop-index (sql-ddl-statement)
