@@ -78,3 +78,16 @@
 
 (def method equal-type-p ((type-1 sql-numeric-type) (type-2 sql-integer-type) (database postgresql))
   (not (bit-size-of type-2)))
+
+(def method format-sql-syntax-node
+    ((node sql-character-varying-type/without-size-if-possible)
+     (database postgresql))
+  (format-string "CHARACTER VARYING")
+  ;; no SIZE needed in PostgreSQL
+  )
+
+(defmethod equal-type-p
+    ((type-1 sql-character-varying-type/without-size-if-possible)
+     (type-2 sql-character-varying-type)
+     (database postgresql))
+   t)

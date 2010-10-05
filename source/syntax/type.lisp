@@ -76,6 +76,22 @@
    (format-string "CHARACTER VARYING")
    (format-size size)))
 
+(def syntax-node sql-character-varying-type/without-size-if-possible
+    (sql-character-varying-type)
+  ())
+
+(def method equal-type-p ((type-1 sql-character-varying-type)
+			  (type-2 sql-character-varying-type/without-size-if-possible)
+			  (database t))
+   (equal-type-p type-2 type-1 database))
+
+(def method equal-type-p ((type-1 sql-character-varying-type/without-size-if-possible)
+			  (type-2 sql-character-varying-type)
+			  (database t))
+   ;; in the general case, type size matters, so let's do nothing here.
+   ;; c.f. the postgres backend for the overrding method. 
+   (call-next-method))
+
 (def syntax-node sql-character-large-object-type (sql-string-type)
   ()
   (:format-sql-syntax-node
