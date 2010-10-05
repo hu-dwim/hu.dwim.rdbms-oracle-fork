@@ -33,11 +33,23 @@
    (format-comma-separated-list
     columns
     (lambda (node db)
-      (funcall (typecase node
-		 (sql-column 'format-sql-identifier)
-		 (t 'format-sql-syntax-node))
-	       node
-	       db)))
+      (typecase node
+	(sql-column
+	  (funcall 'format-sql-identifier node db))
+	(t
+	 ;; Oracle doesn't permit table_name.column_name in
+	 ;; index expressions, and the table_name is redundant
+	 ;; anyway, so let's strip it unconditionally:
+	 (labels ((shorten-columns (node)
+		    (etypecase node
+		      (sql-function-call
+			(setf (arguments-of node)
+			      (mapcar #'shorten-columns
+				      (arguments-of node))))
+		      (sql-column-alias
+			(setf (table-of node) nil)))
+		    node))
+	   (funcall 'format-sql-syntax-node (shorten-columns node) db))))))
    (format-char ")")))
 
 (def syntax-node sql-drop-index (sql-ddl-statement)
