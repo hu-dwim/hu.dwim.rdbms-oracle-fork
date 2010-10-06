@@ -83,7 +83,9 @@
 (def method equal-type-p ((type-1 sql-character-varying-type)
 			  (type-2 sql-character-varying-type/without-size-if-possible)
 			  (database t))
-   (equal-type-p type-2 type-1 database))
+   (if (typep type-1 'sql-character-varying-type/without-size-if-possible)
+       (call-next-method)
+       (equal-type-p type-2 type-1 database)))
 
 (def method equal-type-p ((type-1 sql-character-varying-type/without-size-if-possible)
 			  (type-2 sql-character-varying-type)
