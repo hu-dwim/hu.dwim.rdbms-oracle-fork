@@ -83,16 +83,16 @@
 (def method equal-type-p ((type-1 sql-character-varying-type)
 			  (type-2 sql-character-varying-type/without-size-if-possible)
 			  (database t))
-   (if (typep type-1 'sql-character-varying-type/without-size-if-possible)
-       (call-next-method)
-       (equal-type-p type-2 type-1 database)))
+  (if (typep type-1 'sql-character-varying-type/without-size-if-possible)
+      (call-next-method)
+      ;; normalize order of the arguments, and let the other methods
+      ;; take over:
+      (equal-type-p type-2 type-1 database)))
 
 (def method equal-type-p ((type-1 sql-character-varying-type/without-size-if-possible)
 			  (type-2 sql-character-varying-type)
 			  (database t))
-   ;; in the general case, type size matters, so let's do nothing here.
-   ;; c.f. the postgres backend for the overrding method. 
-   (call-next-method))
+  (eql (size-of type-1) (size-of type-2)))
 
 (def syntax-node sql-character-large-object-type (sql-string-type)
   ()
