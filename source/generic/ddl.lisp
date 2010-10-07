@@ -432,3 +432,11 @@
 
 (defun drop-table-foreign-keys (table)
   (mapc #'drop-foreign-key (list-table-foreign-keys table)))
+
+(def (function e) update-index-using-ddl (index)
+  (unless ;; FIXME: also check that the index definition matches!
+      (find (name-of index)
+	    (list-table-indices (table-name-of index))
+	    :key #'name-of
+	    :test #'string-equal)
+    (execute-ddl index)))

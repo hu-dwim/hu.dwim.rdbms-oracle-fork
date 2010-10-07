@@ -13,6 +13,7 @@
    (table-name
     :type sql-identifier*)
    (columns
+    ;; allows columns or full expressions (if the database supports that)
     nil
     :type list))
   (:documentation "An SQL index specification."))
@@ -29,7 +30,26 @@
    (format-string " ON ")
    (format-sql-identifier table-name)
    (format-string " (")
-   (format-comma-separated-identifiers columns)
+   (format-comma-separated-list
+    columns
+    (lambda (node db)
+      (typecase node
+	(sql-column
+	  (funcall 'format-sql-identifier node db))
+	(t
+	 ;; Oracle doesn't permit table_name.column_name in
+	 ;; index expressions, and the table_name is redundant
+	 ;; anyway, so let's strip it unconditionally:
+	 (labels ((shorten-columns (node)
+		    (etypecase node
+		      (sql-function-call
+			(setf (arguments-of node)
+			      (mapcar #'shorten-columns
+				      (arguments-of node))))
+		      (sql-column-alias
+			(setf (table-of node) nil)))
+		    node))
+	   (funcall 'format-sql-syntax-node (shorten-columns node) db))))))
    (format-char ")")))
 
 (def syntax-node sql-drop-index (sql-ddl-statement)
