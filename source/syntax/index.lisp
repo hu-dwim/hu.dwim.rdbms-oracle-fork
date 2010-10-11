@@ -46,11 +46,25 @@
 			(setf (arguments-of node)
 			      (mapcar #'shorten-columns
 				      (arguments-of node))))
+		      (sql-index-operation
+			(setf (value-of node)
+			      (shorten-columns (value-of node))))
 		      (sql-column-alias
 			(setf (table-of node) nil)))
 		    node))
 	   (funcall 'format-sql-syntax-node (shorten-columns node) db))))))
    (format-char ")")))
+
+(def syntax-node sql-index-operation (sql-syntax-node)
+  ((value
+    :type sql-syntax-node)
+   (operation
+    :type sql-identifier*))
+  (:documentation "An expression for CREATE INDEX annotated with an index operation.")
+  (:format-sql-syntax-node
+   (format-sql-syntax-node value)
+   (format-string " ")
+   (format-sql-identifier operation)))
 
 (def syntax-node sql-drop-index (sql-ddl-statement)
   ((name

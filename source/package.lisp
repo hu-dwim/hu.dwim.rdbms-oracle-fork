@@ -77,6 +77,7 @@
 
            #:sql-create-table
            #:sql-create-index
+	   #:sql-index-operation
            #:sql-create-view
            #:sql-foreign-key-constraint
            #:sql-add-foreign-key-constraint-action
