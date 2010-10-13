@@ -104,9 +104,9 @@
   ((kind
     :type (member :cross :inner :left :right :full :union))
    (left
-    :type sql-table-reference)
+    :type (or sql-table-reference list))
    (right
-    :type sql-table-reference)
+    :type (or sql-table-reference list))
    (on
     nil
     :type sql-expression)
@@ -115,11 +115,15 @@
     :type (list sql-identifier*)))
   (:format-sql-syntax-node
    (format-char "(")
-   (format-sql-syntax-node left)
+   (if (atom left)
+       (format-sql-syntax-node left)
+       (format-comma-separated-list left))
    (format-char " ")
    (format-string (string-upcase kind))
    (format-string " JOIN ")
-   (format-sql-syntax-node right)
+   (if (atom right)
+       (format-sql-syntax-node right)
+       (format-comma-separated-list right))
    (when on
      (format-string " ON ")
      (format-sql-syntax-node on))
