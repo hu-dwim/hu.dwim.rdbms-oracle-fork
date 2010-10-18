@@ -41,7 +41,10 @@
   ((value
     :type (or null boolean number string symbol))
    (type nil
-    :type sql-type))
+    :type sql-type)
+   (suppress-unquoting
+    :type boolean
+    :initform nil))
   (:documentation "Represents an SQL literal.")
   (:format-sql-syntax-node
    (format-sql-literal -self-)))
@@ -194,7 +197,7 @@
 
 (def function unquote-aware-format-sql-literal (literal)
   (bind ((type (type-of literal)))
-    (if type
+    (if (and type (not (suppress-unquoting-p literal)))
         (progn
           (vector-push-extend nil *binding-variables*)
           (vector-push-extend type *binding-types*)
