@@ -134,6 +134,7 @@
   (bind ((*database* (or database *database*))
          (*transaction* nil)
          (body-finished? #f)
+	 (already-committed? #f)
          (*transaction-creator*
           (let ((db *database*)
                 (ta default-terminal-action)
@@ -153,7 +154,16 @@
                 (return-from restart-transaction-loop
                   (multiple-value-prog1
                       (restart-case
-                          (call-in-transaction *database* *transaction* #'-body-)
+                          (restart-bind
+			      ((commit-transaction-and-continue
+				(lambda ()
+				  (assert (not (eq (terminal-action-of *transaction*)
+						   :marked-for-rollback-only)))
+				  (commit-transaction *database* *transaction*)
+				  (setf already-committed? t))
+				 :report-function (lambda (stream)
+						    (format stream "commit transaction immediately, but continue WITH-TRANSACTION block"))))
+			      (call-in-transaction *database* *transaction* #'-body-))
                         (terminate-transaction ()
                           :report (lambda (stream)
                                     (format stream "return (values) from the WITH-TRANSACTION block executing the current terminal action ~S" (terminal-action-of *transaction*)))
@@ -171,11 +181,12 @@
                     (setf body-finished? #t)
                     ;; TODO user code may run after this point, which may call MARK-TRANSACTION-FOR-ROLLBACK-ONLY and stuff like that, which should fail...
                     ;; current example: perec::check-slot-value-type
-                    (ecase (terminal-action-of *transaction*)
-                      ((:commit :marked-for-commit-only)
-                       (commit-transaction *database* *transaction*))
-                      ((:rollback :marked-for-rollback-only)
-                       (rollback-transaction *database* *transaction*))))))
+                    (unless already-committed?
+		      (ecase (terminal-action-of *transaction*)
+			((:commit :marked-for-commit-only)
+			 (commit-transaction *database* *transaction*))
+			((:rollback :marked-for-rollback-only)
+			 (rollback-transaction *database* *transaction*)))))))
            (when *transaction*
              (unwind-protect
                   (unless body-finished?
@@ -184,6 +195,11 @@
                       (serious-condition (condition)
                         (rdbms.warn "Ignoring error while trying to rollback transaction in a failed with-transaction block: ~A" condition))))
                (cleanup-transaction *transaction*))))))))
+
+(def (function e) commit-transaction-and-continue ()
+  (invoke-restart
+   (or (find-restart 'commit-transaction-and-continue)
+       (error "commit-transaction-and-continue called outside of with-transaction block"))))
 
 (def method (setf terminal-action-of) :before (new-value (transaction transaction))
   (when (and (member (terminal-action-of *transaction*) '(:marked-for-rollback-only :marked-for-commit-only))
