@@ -510,6 +510,9 @@
 
              result))))
 
+;; quick test case:
+(assert (equalp #(197 3 46 2 68) (rational-to-byte-array 245016700)))
+
 (def function base-100-digits (number)
   "Returns the base-100 digits of NUMBER (a positive integer) as a list, the most significant
 digit is the first or NIL for 0."
