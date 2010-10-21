@@ -32,11 +32,29 @@
     :type boolean)
    (subqueries
     nil
-    :type (list sql-query-expression)))
+    :type (list sql-query-expression))
+   (order-by
+    nil
+    :type list)                         ; TODO: element type
+   (limit
+    nil
+    :type (or null integer))
+   (offset
+    nil
+    :type (or null integer)))
   (:format-sql-syntax-node
    (format-char "(")
    (format-separated-list subqueries
                           (string+ (symbol-name set-operation) (if all " ALL" "")))
+   (when order-by
+     (format-string " ORDER BY ")
+     (format-comma-separated-list order-by))
+   (when limit
+     (format-string " LIMIT ")
+     (format-sql-syntax-node limit))
+   (when offset
+     (format-string " OFFSET ")
+     (format-sql-syntax-node offset))
    (format-char ")")))
 
 (def definer set-operation (name)
