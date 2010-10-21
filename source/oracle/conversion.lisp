@@ -421,11 +421,16 @@
              ;; mantissa
              (multiple-value-bind (base-100-digits length) (base-100-digits mantissa)
                (incf base-100-exponent length)
+               (iter
+                 (while (zerop (elt base-100-digits (1- length))))
+                 (decf length))
                (if negativep
                    (loop for d in base-100-digits
+                         repeat length
                          while (< (length result) max-len)
                          do (vector-push-extend (- 101 d) result))
                    (loop for d in base-100-digits
+                         repeat length
                          while (< (length result) max-len)
                          do (vector-push-extend (1+ d) result))))
              ;; exponent

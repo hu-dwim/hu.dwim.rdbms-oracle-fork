@@ -309,7 +309,7 @@
          (siz (lob-get-length svchp errhp locator)))
     (if (plusp siz)
         (let ((bufp (cffi::foreign-alloc 'oci:ub-1 :count siz))
-              (result (make-array siz)))
+              (result (make-array siz :element-type '(unsigned-byte 8))))
           (unwind-protect
                (progn
                  (lob-read svchp errhp locator bufp siz)
