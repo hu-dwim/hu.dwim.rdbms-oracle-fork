@@ -8,8 +8,16 @@
 
 (def symbol-macro null (cffi:null-pointer))
 
+;; cffi does not inline foreign-alloc with :initial-element, with
+;; _disastrous_ consequences for performance.  Here's the workaround:
+(defmacro foreign-alloc-with-initial-element (type &key initial-element)
+  `(let ((ptr (cffi:foreign-alloc ,type)))
+     (setf (cffi:mem-aref ptr ,type 0) ,initial-element)
+     ptr))
+
 (def function make-void-pointer ()
-  (cffi:foreign-alloc '(:pointer :void) :initial-element null))
+  (foreign-alloc-with-initial-element '(:pointer :void)
+				      :initial-element null))
 
 (def special-variable *default-oci-flags* (logior oci:+threaded+ oci:+new-length-semantics+))
 

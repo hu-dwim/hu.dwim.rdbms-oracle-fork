@@ -263,10 +263,10 @@
          (typemap (typemap-for-sql-type sql-type))
          (oci-type-code (typemap-external-type typemap))
          (converter (typemap-lisp-to-oci typemap))
-         (bind-handle-pointer (cffi:foreign-alloc :pointer :initial-element null))
+         (bind-handle-pointer (foreign-alloc-with-initial-element :pointer :initial-element null))
          (is-null (or (eql value :null)
                       (and (cl:null value) (not (typep sql-type 'sql-boolean-type)))))
-         (indicator (cffi:foreign-alloc 'oci:sb-2 :initial-element (if is-null -1 0))))
+         (indicator (foreign-alloc-with-initial-element 'oci:sb-2 :initial-element (if is-null -1 0))))
     (multiple-value-bind (data-pointer data-size)
         (if is-null
             (if (or (typep sql-type 'sql-character-large-object-type)
@@ -279,7 +279,7 @@
 
       ;; TODO THL why **locator and not *locator? stmt-execute crashes:-{
       (when (lob-type-p sql-type)
-        (setq data-pointer (cffi:foreign-alloc :pointer :initial-element data-pointer)))
+        (setq data-pointer (foreign-alloc-with-initial-element :pointer :initial-element data-pointer)))
       
       (oci-call (oci:bind-by-pos statement-handle
                                  bind-handle-pointer
@@ -326,11 +326,31 @@
    (indicators)
    (return-codes)))
 
+(defun ensure-allocator (cache count)
+  (if (< count (length cache))
+      (or (elt cache count)
+	  (setf (elt cache count)
+		(compile
+		 nil
+		 `(lambda ()
+		    (declare (optimize speed))
+		    (let ((ptr (cffi:foreign-alloc :uint8 :count ,count)))
+		      (dotimes (i ,count)
+			(setf (cffi:mem-aref ptr :uint8 i) 0))
+		      ptr)))))
+      (progn
+	(lambda ()
+	  (warn "out of line call to foreign-alloc for count ~D" count)
+	  (cffi:foreign-alloc :uint8
+			      :count count
+			      :initial-element 0)))))
+
 (def function allocate-buffer-for-column (typemap column-size number-of-rows)
   "Returns buffer, buffer-size"
   (let* ((external-type (typemap-external-type typemap))
          (size (data-size-for external-type column-size))
-         (ptr (cffi:foreign-alloc :uint8 :count (* size number-of-rows) :initial-element 0))
+	 (cache (load-time-value (make-array 10000 :initial-element nil)))
+         (ptr (funcall (ensure-allocator cache (* size number-of-rows))))
          (constructor (typemap-allocate-instance typemap)))
 
     (when constructor
