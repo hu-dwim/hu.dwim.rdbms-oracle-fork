@@ -15,7 +15,17 @@
    (columns
     ;; allows columns or full expressions (if the database supports that)
     nil
-    :type list))
+    :type list)
+   (using
+    ;; e.g. [USING method] for postgresql
+    ;; http://www.postgresql.org/docs/8.2/static/sql-createindex.html
+    nil
+    :type string)
+   (properties
+    ;; index properties for oracle
+    ;; http://download.oracle.com/docs/cd/B13789_01/server.101/b10759/statements_5010.htm#i2138869
+    nil
+    :type string))
   (:documentation "An SQL index specification."))
 
 (def syntax-node sql-create-index (sql-ddl-statement sql-index)
@@ -29,6 +39,9 @@
    (format-sql-identifier name)
    (format-string " ON ")
    (format-sql-identifier table-name)
+   (when using
+     (format-string " USING ")
+     (format-string using))
    (format-string " (")
    (format-comma-separated-list
     columns
@@ -42,6 +55,7 @@
 	 ;; anyway, so let's strip it unconditionally:
 	 (labels ((shorten-columns (node)
 		    (etypecase node
+                      (string) ;; do nothing for hu.dwim.perec::a-function-call
 		      (sql-function-call
 			(setf (arguments-of node)
 			      (mapcar #'shorten-columns
@@ -53,12 +67,16 @@
 			(setf (table-of node) nil)))
 		    node))
 	   (funcall 'format-sql-syntax-node (shorten-columns node) db))))))
-   (format-char ")")))
+   (format-char ")")
+   (when properties
+     (format-string " ")
+     (format-string properties))))
 
 (def syntax-node sql-index-operation (sql-syntax-node)
   ((value
     :type sql-syntax-node)
    (operation
+    ;; http://developer.postgresql.org/pgdocs/postgres/indexes-opclass.html
     :type sql-identifier*))
   (:documentation "An expression for CREATE INDEX annotated with an index operation.")
   (:format-sql-syntax-node
