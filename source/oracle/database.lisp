@@ -9,7 +9,8 @@
 (def (class* e) oracle (database)
   ((connection-encoding
     :utf-16
-    :type (member :ascii :utf-16))))
+    :type (member :ascii :utf-16))
+   (paraminfos (make-hash-table :test 'equal))))
 
 (def method transaction-mixin-class list ((db oracle))
   'oracle-transaction)
