@@ -43,7 +43,6 @@
     nil
     :type (or null integer)))
   (:format-sql-syntax-node
-   (format-char "(")
    (format-separated-list subqueries
                           (string+ (symbol-name set-operation) (if all " ALL" "")))
    (when order-by
@@ -54,8 +53,7 @@
      (format-sql-syntax-node limit))
    (when offset
      (format-string " OFFSET ")
-     (format-sql-syntax-node offset))
-   (format-char ")")))
+     (format-sql-syntax-node offset))))
 
 (def definer set-operation (name)
   (let ((constructor-name (sql-constructor-name name)))
