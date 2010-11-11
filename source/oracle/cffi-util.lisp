@@ -289,13 +289,14 @@
   (assert (plusp (length value)))
   (let ((svchp (service-context-handle-of *transaction*))
         (errhp (error-handle-of *transaction*))
-        (siz (array-dimension value 0)))
+        (siz (length value)))
     (let ((bufp (cffi::foreign-alloc 'oci:ub-1 :count siz)))
       (unwind-protect
            (progn
              (loop
                 for byte across value
                 for i from 0
+		below siz	;stop at the vector's fill-pointer
                 do (setf (cffi:mem-aref bufp 'oci:ub-1 i) byte))
              (lob-write svchp errhp locator bufp siz))
         (cffi:foreign-string-free bufp)))))
