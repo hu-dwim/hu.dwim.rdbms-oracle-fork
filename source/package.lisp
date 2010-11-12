@@ -50,6 +50,8 @@
 
            #:sql-cond
            #:sql-if
+           #:sql-full-text-search-query
+           #:suppress-unquoting-p
 
            #:mark-transaction-for-commit-only
            #:mark-transaction-for-rollback-only

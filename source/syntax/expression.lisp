@@ -361,3 +361,70 @@
   (:format-sql-syntax-node
    (format-sql-literal
     (sql-literal :value #f :type (make-instance 'sql-boolean-type)))))
+
+;;; full text search queries
+;;;
+;;; http://www.stanford.edu/dept/itss/docs/oracle/10g/text.101/b10730/cqoper.htm
+;;; http://www.postgresql.org/docs/8.4/static/textsearch.html
+
+(def syntax-node sql-full-text-search-query (sql-syntax-node)
+  ((query))
+  (:format-sql-syntax-node
+   (format-sql-syntax-node
+    (full-text-search-query-to-sql query (backend-type database)))))
+
+(def method format-sql-literal ((q sql-full-text-search-query) db)
+  (format-sql-syntax-node q db))
+
+;; TODO THL shouldn't this be part of sexp2sql and rdbms dependent on it?
+(defun full-text-search-query-to-sql (q backend)
+  ;; TODO THL collect phrases for "and ilike" with postgresql?
+  (with-output-to-string (s)
+    (labels ((p (args &optional sep lpar rpar)
+               (when lpar
+                 (princ lpar s))
+               (loop
+                  for arg in args
+                  for n from 0
+                  do (progn
+                       (when (and sep (plusp n))
+                         (princ sep s))
+                       (rec arg)))
+               (when rpar
+                 (princ rpar s)))
+             (rec (q &optional top)
+               (etypecase q
+                 (string (ecase backend
+                           (:postgresql
+                            (assert (not (find #\space q :test #'char=)))
+                            (princ q s))
+                           (:oracle
+                            (assert (not (find #\space q :test #'char=)))
+                            (princ q s))))
+                 (cons (if (cddr q)
+                           (p (cdr q)
+                              (ecase backend
+                                (:postgresql
+                                 (ecase (car q)
+                                   (:and "&")
+                                   (:or "|")
+                                   (:seq " ")))
+                                (:oracle
+                                 (ecase (car q)
+                                   (:and " and ")
+                                   (:or "|")
+                                   (:seq " "))))
+                              (if (and (eq :postgresql backend)
+                                       (eq :seq (car q)))
+                                  "''"
+                                  (unless top "("))
+                              (if (and (eq :postgresql backend)
+                                       (eq :seq (car q)))
+                                  "''"
+                                  (unless top ")")))
+                           (case (car q)
+                             (:not (ecase backend
+                                     (:postgresql (format s "!~a" (cadr q)))
+                                     (:oracle (format s "~~~a" (cadr q)))))
+                             (t (rec (cadr q) top))))))))
+      (rec q t))))

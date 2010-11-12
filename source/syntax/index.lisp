@@ -55,7 +55,7 @@
 	 ;; anyway, so let's strip it unconditionally:
 	 (labels ((shorten-columns (node)
 		    (etypecase node
-                      (string) ;; do nothing for hu.dwim.perec::a-function-call
+                      (sql-literal)
 		      (sql-function-call
 			(setf (arguments-of node)
 			      (mapcar #'shorten-columns
