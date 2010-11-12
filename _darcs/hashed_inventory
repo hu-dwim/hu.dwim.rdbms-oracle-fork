@@ -1,4 +1,4 @@
-pristine:0000001842-e0fe71c39dbaadbbd7eda2a1897535d38923c8b9f7c35169d55d62be133dd578
+pristine:0000001842-492d25eaab2ef70aff8877b9591f99e0795bec314bb5b9580143c589ef603b04
 Starting with inventory:
 0000045502-e1a9459b24334c27a11eeace095ef58251a01cd300ad8c2e98cae3c0c9c37aac
 [TAG 2008-11-27
@@ -1078,3 +1078,52 @@ tomas.hlavaty@knowledgetools.de**20101112110436
  Ignore-this: d1448a6c8ed8dff85bcae8530efd08a
 ] 
 hash: 0000003583-b45a6116f46b424f2ba3c71bae8f3f01ea2332462bc4c26610eac7a8a27be2e6
+[Remove explicit parens in format of set operation expressions
+david@knowledgetools.de**20101112165204
+ 
+ ... for Oracle, no parens are allowed
+ 
+ ... if there are cases where parens are needed after all, this would be
+ context dependent, so the parent node would have to take care of it.
+] 
+hash: 0000000496-3e8c32097c84071c5e6ed87dfdb6e731359547749ee8cccbc836b957dae2998c
+[Fix trailing zeros in rdbms.oracle:rational-to-byte-array
+david@knowledgetools.de**20101112165436] 
+hash: 0000000425-0811a0e3974d8f932d0afc4998fb2d26a187b2344580154137474f1e346e9071
+[Optimize oci-string-to-lisp to pre-allocate the string instead of slowly consing a temporary list
+david@knowledgetools.de**20101112170136] 
+hash: 0000001005-2b9c733c03cb644dcdc43f4c5c9cdc0b95f38e5622792d2347c81b6960c0014a
+[In upload-lob, understand non-simple vectors, i.e. obey the fill-pointer
+david@knowledgetools.de**20101112170143] 
+hash: 0000000472-63d5abe0925522f10f132c52296076e8621ad18ccab9b4d61cad734c6f0ad3c1
+[New function rdbms:commit-transaction-and-continue
+david@knowledgetools.de**20101112170318
+ 
+ ... used in a with-transaction block, this restart and function allow
+ the block to commit ahead of time
+] 
+hash: 0000001826-01543723e8e89ff2758884702d70cc830b6da59a76c0c5239597a05d8f140341
+[Kludge: Fix oracle backend performance (part 1): Avoid cffi:foreign-alloc with :initial-element
+david@knowledgetools.de**20101112170640
+ 
+ Important oracle performance commit, but probably not good for upstream yet:
+ 
+ This use of foreign-alloc is not a path optimized by cffi compiler macros,
+ and therefore extremely slow.
+ 
+ Obviously, this optimization should be done in cffi instead of rdbms.oracle,
+ but I needed a quick fix.
+] 
+hash: 0000001685-b98bda499161880507cd8f36240587bc7858ff48bdf1904324829c18914e0184
+[Kludge: Fix oracle backend performance (part 2): Improve column descriptor allocation by caching descriptor data as far as possible
+david@knowledgetools.de**20101112171245
+ 
+ Important oracle performance commit, not certain whether it's clean
+ enough for upstream yet.  It certainly helps tremenously on Allegro, but
+ I'd like to more cffi-related benchmarking across Lisp implementations.
+ 
+ It's important for the cache to be cross-transactional in order to get
+ meaningful reuse of the buffers, even though that implies a "global"
+ lock for thread-safe access to the table.
+] 
+hash: 0000011907-48d032e13bc753fb3592ca2ee44ed2f89019bfc9f192706bf0e9c1474e15acdc
