@@ -127,7 +127,7 @@
 				 (aref column 3)
 				 (aref column 4)))))
    (execute
-    (format nil "select column_name, data_type, char_length, data_precision, data_scale, table_name from all_tab_columns where owner='~A'"
+    (format nil "select column_name, data_type, char_length, data_precision, data_scale, table_name from all_tab_columns where owner='~A' and not (table_name like 'DR$%')"
 	    (database-effective-schema database))
     :result-type 'vector)))
 
