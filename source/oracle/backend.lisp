@@ -263,10 +263,10 @@
          (typemap (typemap-for-sql-type sql-type))
          (oci-type-code (typemap-external-type typemap))
          (converter (typemap-lisp-to-oci typemap))
-         (bind-handle-pointer (cffi:foreign-alloc :pointer :initial-element null))
+         (bind-handle-pointer (foreign-alloc-with-initial-element :pointer :initial-element null))
          (is-null (or (eql value :null)
                       (and (cl:null value) (not (typep sql-type 'sql-boolean-type)))))
-         (indicator (cffi:foreign-alloc 'oci:sb-2 :initial-element (if is-null -1 0))))
+         (indicator (foreign-alloc-with-initial-element 'oci:sb-2 :initial-element (if is-null -1 0))))
     (multiple-value-bind (data-pointer data-size)
         (if is-null
             (if (or (typep sql-type 'sql-character-large-object-type)
@@ -279,7 +279,7 @@
 
       ;; TODO THL why **locator and not *locator? stmt-execute crashes:-{
       (when (lob-type-p sql-type)
-        (setq data-pointer (cffi:foreign-alloc :pointer :initial-element data-pointer)))
+        (setq data-pointer (foreign-alloc-with-initial-element :pointer :initial-element data-pointer)))
       
       (oci-call (oci:bind-by-pos statement-handle
                                  bind-handle-pointer
@@ -324,32 +324,92 @@
    (buffer)
    (typemap)
    (indicators)
-   (return-codes)))
+   (return-codes)
+   (paraminfo)))
+
+(defun ensure-allocator (cache count)
+  (if (< count (length cache))
+      (or (elt cache count)
+	  (setf (elt cache count)
+		(compile
+		 nil
+		 `(lambda ()
+		    (declare (optimize speed))
+		    (let ((ptr (cffi:foreign-alloc :uint8 :count ,count)))
+		      (dotimes (i ,count)
+			(setf (cffi:mem-aref ptr :uint8 i) 0))
+		      ptr)))))
+      (progn
+	(lambda ()
+	  (warn "out of line call to foreign-alloc for count ~D" count)
+	  (cffi:foreign-alloc :uint8
+			      :count count
+			      :initial-element 0)))))
+
+(defvar *paraminfo-lock* (bt:make-recursive-lock))
+
+(defun clear-paraminfo-cache ()
+  (clrhash (paraminfos-of *database*)))
+
+(defun acquire-paraminfo
+    (column-type column-size precision scale database)
+  (let ((key (list column-type column-size precision scale))
+	(table (paraminfos-of database)))
+    (bt:with-recursive-lock-held (*paraminfo-lock*)
+      (let ((values (gethash key table)))
+	(cond
+	  (values
+	   (setf (gethash key table) (cdr values))
+	   (car values))
+	  (t
+	   nil))))))
+
+(defun return-paraminfo (paraminfo database)
+  (setf (acquire-paraminfo (paraminfo-column-type paraminfo)
+			   (paraminfo-column-size paraminfo)
+			   (paraminfo-precision paraminfo)
+			   (paraminfo-scale paraminfo)
+			   database)
+	paraminfo))
+
+(defun (setf acquire-paraminfo)
+    (newval column-type column-size precision scale database)
+  (let ((key (list column-type column-size precision scale))
+	(table (paraminfos-of database)))
+    (bt:with-recursive-lock-held (*paraminfo-lock*)
+      (push newval (gethash key table))))
+  newval)
+
+(def function initialize-buffer-for-column (constructor buffer size number-of-rows)
+  (when constructor
+    (loop for i from 0 below number-of-rows
+       do (funcall constructor (cffi:inc-pointer buffer (* i size))))))
 
 (def function allocate-buffer-for-column (typemap column-size number-of-rows)
-  "Returns buffer, buffer-size"
+  "Returns buffer, buffer-size, constructor"
   (let* ((external-type (typemap-external-type typemap))
-         (size (data-size-for external-type column-size))
-         (ptr (cffi:foreign-alloc :uint8 :count (* size number-of-rows) :initial-element 0))
-         (constructor (typemap-allocate-instance typemap)))
+	 (size (data-size-for external-type column-size))
+	 (funcache (load-time-value (make-array 10000 :initial-element nil)))
+	 (ptr (funcall (ensure-allocator funcache (* size number-of-rows))))
+	 (constructor (typemap-allocate-instance typemap)))
 
-    (when constructor
-      (loop for i from 0 below number-of-rows
-            do (funcall constructor (cffi:inc-pointer ptr (* i size)))))
+    (initialize-buffer-for-column constructor
+				  ptr
+				  size
+				  number-of-rows)
 
     (values
      ptr
-     size)))
+     size
+     constructor)))
 
-(def function free-column-descriptor (descriptor)
-  (with-slots (size typemap buffer indicators return-codes) descriptor
+(def function free-column-descriptor (transaction descriptor)
+  (with-slots (size typemap buffer paraminfo) descriptor
     (let ((destructor (typemap-free-instance typemap)))
       (when destructor
         (loop for i from 0 below +number-of-buffered-rows+
-              do (funcall destructor (cffi:mem-ref buffer :pointer (* i size))))))
-    (cffi:foreign-free buffer)
-    (cffi:foreign-free indicators)
-    (cffi:foreign-free return-codes)))
+              do (funcall destructor (cffi:mem-ref buffer :pointer (* i size)))))
+      (return-paraminfo paraminfo (database-of transaction)))))
 
 (def class* oracle-cursor (cursor)
   ((statement)
@@ -386,7 +446,7 @@
 
 (def method close-cursor ((cursor oracle-cursor))
   (loop for descriptor across (column-descriptors-of cursor)
-        do (free-column-descriptor descriptor)))
+        do (free-column-descriptor (transaction-of cursor) descriptor)))
 
 (def method cursor-position ((cursor oracle-sequential-access-cursor))
   (unless (end-seen-p cursor)
@@ -479,72 +539,123 @@
                                                   (cffi:mem-ref param-descriptor-pointer :pointer))))
           'simple-vector))
 
-(def function make-column-descriptor (statement transaction position param-descriptor)
+(defstruct (paraminfo (:constructor %make-paraminfo))
+  typemap
+  define-handle-pointer
+  return-codes
+  indicators
+  buffer
+  constructor
+  size
+  ;; hash key:
+  column-type
+  column-size
+  precision
+  scale)
+
+(defun %parse-paraminfo (param-descriptor)
   (cffi:with-foreign-objects ((attribute-value :uint8 8) ; 8 byte buffer for attribute values
                               (attribute-value-length 'oci:ub-4))
-    (flet ((oci-attr-get (attribute-id cffi-type)
-             (oci-attr-get param-descriptor attribute-id attribute-value attribute-value-length)
-             (cffi:mem-ref attribute-value cffi-type))
-           (oci-string-attr-get (attribute-id)
-             (oci-attr-get param-descriptor attribute-id attribute-value attribute-value-length)
-             (oci-string-to-lisp
-              (cffi:mem-ref attribute-value '(:pointer :unsigned-char)) ; OraText*
-              (cffi:mem-ref attribute-value-length 'oci:ub-4))))
-
-
+    (macrolet
+	;; use a macro so that the compiler macro on mem-ref can see the
+	;; cffi-type!  essential for speed.
+	((%oci-attr-get (attribute-id cffi-type)
+	   `(progn
+	      (oci-attr-get param-descriptor ,attribute-id attribute-value attribute-value-length)
+	      (cffi:mem-ref attribute-value ,cffi-type)))
+	 (oci-string-attr-get (attribute-id)
+	   `(progn
+	      (oci-attr-get param-descriptor ,attribute-id attribute-value attribute-value-length)
+	      (oci-string-to-lisp
+	       (cffi:mem-ref attribute-value :pointer) ; OraText*
+	       (cffi:mem-ref attribute-value-length 'oci:ub-4)))))
       (let ((column-name (oci-string-attr-get oci:+attr-name+))
-            (column-type (oci-attr-get oci:+attr-data-type+ 'oci:ub-2))
-            (column-size)
-            (precision)
-            (scale)
-            (typemap)
-            (define-handle-pointer (cffi:foreign-alloc :pointer :initial-element null))
-            (return-codes (cffi:foreign-alloc :unsigned-short :count +number-of-buffered-rows+))
-            (indicators (cffi:foreign-alloc :short :count +number-of-buffered-rows+)))
-        (declare (fixnum column-type))
+	    (column-type (%oci-attr-get oci:+attr-data-type+ 'oci:ub-2))
+	    (column-size)
+	    (precision)
+	    (scale))
+	(declare (fixnum column-type))
+	(progn
+	  ;; KLUDGE oci:+attr-data-size+ returned as ub-2, despite it is documented as ub-4
+	  (setf (cffi:mem-ref attribute-value :unsigned-short) 0)
+	  (setf column-size (%oci-attr-get oci:+attr-data-size+ 'oci:ub-2)))
 
-        (progn
-          ; KLUDGE oci:+attr-data-size+ returned as ub-2, despite it is documented as ub-4
-          (setf (cffi:mem-ref attribute-value :unsigned-short) 0)
-          (setf column-size (oci-attr-get oci:+attr-data-size+ 'oci:ub-2)))
+	(rdbms.dribble "Retrieving column: name=~W, type=~D, size=~D"
+		       column-name column-type column-size)
 
-        (rdbms.dribble "Retrieving column: name=~W, type=~D, size=~D"
-                       column-name column-type column-size)
+	(when (= column-type oci:+sqlt-num+)
+	  ;; the type of the precision attribute is 'oci:sb-2, because we
+	  ;; use an implicit describe here (would be sb-1 for explicit describe)
+	  (setf precision (%oci-attr-get oci:+attr-precision+ 'oci:sb-2)
+		scale (%oci-attr-get oci:+attr-scale+ 'oci:sb-1)))
+	(values column-name column-type column-size precision scale)))))
 
-        (when (= column-type oci:+sqlt-num+)
-          ;; the type of the precision attribute is 'oci:sb-2, because we
-          ;; use an implicit describe here (would be sb-1 for explicit describe)
-          (setf precision (oci-attr-get oci:+attr-precision+ 'oci:sb-2)
-                scale (oci-attr-get oci:+attr-scale+ 'oci:sb-1)))
+(defun make-paraminfo (column-type column-size precision scale)
+  (let ((typemap (typemap-for-internal-type column-type column-size :precision precision :scale scale)))
+    (multiple-value-bind (buffer size constructor)
+	(allocate-buffer-for-column
+	 typemap column-size +number-of-buffered-rows+)
+      (%make-paraminfo
+       :typemap typemap
+       :define-handle-pointer (foreign-alloc-with-initial-element :pointer :initial-element null)
+       :return-codes (cffi:foreign-alloc :unsigned-short :count +number-of-buffered-rows+)
+       :indicators (cffi:foreign-alloc :short :count +number-of-buffered-rows+)
+       :buffer buffer
+       :constructor constructor
+       :size size
+       :column-type column-type
+       :column-size column-size
+       :precision precision
+       :scale scale))))
 
-        (setf typemap (typemap-for-internal-type column-type
-                                                 column-size
-                                                 :precision precision
-                                                 :scale scale))
+(defun parse-paraminfo (param-descriptor database)
+  (multiple-value-bind (column-name column-type column-size precision scale)
+      (%parse-paraminfo param-descriptor)
+    (values column-name
+	    (let ((x (acquire-paraminfo
+		      column-type column-size precision scale database)))
+	      (cond
+		(x
+		 (initialize-buffer-for-column
+		  (paraminfo-constructor x)
+		  (paraminfo-buffer x)
+		  (paraminfo-size x)
+		  +number-of-buffered-rows+)
+		 x)
+		(t
+		 (make-paraminfo column-type column-size precision scale)))))))
 
-        (multiple-value-bind (buffer size)
-            (allocate-buffer-for-column typemap column-size +number-of-buffered-rows+)
-          (oci:define-by-pos
-              (statement-handle-of statement)
-              define-handle-pointer
-            (error-handle-of transaction)
-            position
-            buffer
-            size
-            (typemap-external-type typemap)
-            indicators
-            null
-            return-codes
-            *default-oci-flags*)
-
-          (make-instance 'column-descriptor
-                         :define-handle-pointer define-handle-pointer
-                         :name column-name
-                         :size size
-                         :buffer buffer
-                         :typemap typemap
-                         :return-codes return-codes
-                         :indicators indicators))))))
+(def function make-column-descriptor (statement transaction position param-descriptor)
+  (multiple-value-bind (column-name paraminfo)
+      (parse-paraminfo param-descriptor
+		       (database-of transaction))
+    (let ((typemap (paraminfo-typemap paraminfo))
+	  (define-handle-pointer (paraminfo-define-handle-pointer paraminfo))
+	  (return-codes (paraminfo-return-codes paraminfo))
+	  (indicators (paraminfo-indicators paraminfo))
+	  (buffer (paraminfo-buffer paraminfo))
+	  (size (paraminfo-size paraminfo)))
+      (oci:define-by-pos
+	  (statement-handle-of statement)
+	  define-handle-pointer
+	(error-handle-of transaction)
+	position
+	buffer
+	size
+	(typemap-external-type typemap)
+	indicators
+	null
+	return-codes
+	*default-oci-flags*)
+      (make-instance 'column-descriptor
+		     :define-handle-pointer define-handle-pointer
+		     :name column-name
+		     :size size
+		     :buffer buffer
+		     :typemap typemap
+		     :return-codes return-codes
+		     :indicators indicators
+		     :paraminfo paraminfo))))
 
 (def generic ensure-current-position-is-buffered (cursor)
   (:method ((cursor oracle-sequential-access-cursor))

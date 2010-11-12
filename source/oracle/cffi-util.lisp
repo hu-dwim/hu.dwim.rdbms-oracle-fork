@@ -8,8 +8,16 @@
 
 (def symbol-macro null (cffi:null-pointer))
 
+;; cffi does not inline foreign-alloc with :initial-element, with
+;; _disastrous_ consequences for performance.  Here's the workaround:
+(defmacro foreign-alloc-with-initial-element (type &key initial-element)
+  `(let ((ptr (cffi:foreign-alloc ,type)))
+     (setf (cffi:mem-aref ptr ,type 0) ,initial-element)
+     ptr))
+
 (def function make-void-pointer ()
-  (cffi:foreign-alloc '(:pointer :void) :initial-element null))
+  (foreign-alloc-with-initial-element '(:pointer :void)
+				      :initial-element null))
 
 (def special-variable *default-oci-flags* (logior oci:+threaded+ oci:+new-length-semantics+))
 
@@ -84,18 +92,28 @@
     ,@args))
 
 (def function oci-string-to-lisp (pointer &optional size)
+  (declare (optimize speed))
   #+nil
   (cffi:foreign-string-to-lisp pointer :count size
                                :encoding (connection-encoding-of (database-of *transaction*)))
   ;; the above doesn't work, because babel thinks the encoding is
   ;; invalid and returns question marks only.  Perhaps Babel doesn't
   ;; understand the endianness?  Need to investigate.
-  (coerce (iter (for i from 0 by 2)
-		(when size (while (< i size)))
-		(let ((code (cffi:mem-ref pointer :short i)))
-		  (until (zerop code))
-		  (collect (code-char code))))
-	  'string))
+  (let* ((nchars (if size
+		     ;; SIZE is an upper limit, but we cannot trust it:
+		     (let ((limit (truncate size 2)))
+		       (iter (for i from 0)
+			     (repeat limit)
+			     (when (eql 0 (cffi:mem-aref pointer :short i))
+			       (return i))
+			     (finally (return limit))))
+		     (iter (for i from 0)
+			   (when (eql 0 (cffi:mem-aref pointer :short i))
+			     (return i)))))
+	 (result (make-string nchars)))
+    (iter (for i from 0 below nchars)
+	  (setf (char result i) (code-char (cffi:mem-aref pointer :short i))))
+    result))
 
 (def function oci-char-width ()
   (cffi::null-terminator-len (connection-encoding-of (database-of *transaction*)))) ;; FIXME using internal fn
