@@ -467,9 +467,9 @@
     "SQL-FULL-TEXT-SEARCH-QUERY-OUTER-FUNCTION ~s ~s ~s not meant to be used with ~s backend"
     exp what query (backend-type *database*))))
 
-;; (def syntax-node sql-full-text-search-query-inner-function (sql-syntax-node)
-;;   ((exp))
-;;   (:format-sql-syntax-node
-;;    (error
-;;     "SQL-FULL-TEXT-SEARCH-QUERY-INNER-FUNCTION ~s not meant to be used with ~s backend"
-;;     exp (backend-type *database*))))
+(def syntax-node sql-full-text-search-query-inner-function (sql-syntax-node)
+  ((exp))
+  (:format-sql-syntax-node
+   (error
+    "SQL-FULL-TEXT-SEARCH-QUERY-INNER-FUNCTION ~s not meant to be used with ~s backend"
+    exp (backend-type *database*))))

@@ -92,9 +92,19 @@
      (database postgresql))
    t)
 
-;;; SQL-FULL-TEXT-SEARCH-QUERY-OUTER-FUNCTION
+;;; SQL-FULL-TEXT-SEARCH-QUERY-OUTER-FUNCTION and
+;;; SQL-FULL-TEXT-SEARCH-QUERY-inner-FUNCTION play some tricks
+;;; together.  The purpose of the outer function is to postpone sql
+;;; query construction until runtime because only then I know what the
+;;; sql query should look like depending on the value (full text
+;;; search query) of the query lexical variable.  Anything under the
+;;; outer function cannot have SQL-UNQUOTEs except the inner function,
+;;; which then "replaces" the SQL-UNQUOTE with the actual runtime
+;;; value.
 
-(defun the-unquoted-lexical-variable (x)
+(defparameter *inner-function-replacement* nil)
+
+(defun the-unquoted-lexical-variable (x) ;; TODO THL the perec:: symbols here?!
   (assert (typep x 'sql-unquote))
   (let ((form (form-of x)))
     (unless (and (listp form)
@@ -109,52 +119,22 @@
 
 (def method format-sql-syntax-node
   ((x sql-full-text-search-query-outer-function) (database postgresql))
-  (let ((value-form (the-unquoted-lexical-variable (hu.dwim.rdbms::query-of x))))
+  (let ((value-form (the-unquoted-lexical-variable (query-of x))))
     (push-form-into-command-elements
-     `(progn
-        (print (list '@@@@@@@@@-1 ,value-form (baumdb-impl::one ,value-form)))
-        ;;(setf (baumdb-impl::one ,value-form) "YES")
-        (setf ,value-form "TRUE")
-        (print (list '@@@@@@@@@-2 ,value-form))
-        ;;(print (list '@@@@@@@@@-2 ,value-form (baumdb-impl::one ,value-form)))
-        ;; (print (list '@@@@@@@@@-1 ,value-form))
-        ;; (print (list '@@@@@@@@@-1 (query-of ,value-form)))
-        ;; ;;(print (list '@@@@@@@@@-2 (setf (query-of ,value-form) "YES")))
-        ;; (print (list '@@@@@@@@@-3 (setf ,value-form "YES")))
-        ;;(format-string "'<<<' || '")
-        ;;(write-diverted-sql)
-        (format-string ,value-form)
-        ;;(format-string "YES")
-        ;;(format-sql-syntax-node (baumdb-impl::one ,value-form) *database*)
-        ;;(format-sql-syntax-node ,value-form *database*)
-        ;;(format-string "' || '>>>'")
-        #+nil
-        (setf ,value-form (concatenate 'string
-                                       "["
-                                       ,value-form
-                                       "|"
-                                       ,value-form
-                                       "]")))))
-  #+nil
-  (let* ((var (hu.dwim.rdbms::var-of x))
-         (val (cdar *full-text-search-query-bindings*))) ;; TODO THL find the right value based on var
-    (format-sql-syntax-node
-     (rewrite-full-text-search-query-outer-function (exp-of x)
-                                                    (hu.dwim.rdbms::what-of x)
-                                                    var
-                                                    val
-                                                    (query-of val))
-     database)))
+     `(let ((*inner-function-replacement* ,value-form))
+        (format-sql-syntax-node
+         (rewrite-full-text-search-query-outer-function
+          ,(exp-of x) ,(what-of x) ,value-form)
+         *database*)))))
 
-;; (def method format-sql-syntax-node
-;;   ((x sql-full-text-search-query-inner-function) (database postgresql))
-;;   (let ((exp (exp-of x)))
-;;     ;;(error "INNER ~s" *full-text-search-query-bindings*)
-;;     (if *%finding-inner-lvar*
-;;         exp
-;;         (format-sql-syntax-node exp database))))
+(def method format-sql-syntax-node
+  ((x sql-full-text-search-query-inner-function) (database postgresql))
+  ;; Here I ignore the the SQL-UNQUOTE because it's to late for it to
+  ;; be useful.  I use the unquoted value passed in from the outer
+  ;; function instead.
+  (format-sql-syntax-node *inner-function-replacement* database))
 
-(defun rewrite-full-text-search-query-outer-function (exp what var val query)
+(defun rewrite-full-text-search-query-outer-function (exp what query)
   ;; similar to full-text-search-query-to-sql but this time creating
   ;; syntax-nodes and fixing the actual query
   (labels ((rec (q)
@@ -168,7 +148,7 @@
                        (:and
                         (multiple-value-bind (words patterns)
                             (words-and-patterns-of-full-text-query q)
-                          (setf (query-of val) `(:and ,@ words))
+                          (setf (query-of query) `(:and ,@words))
                           (apply 'sql-and
                                  (append (when words
                                            (list exp))
@@ -183,7 +163,7 @@
                        #+nil(:not)
                        #+nil(:seq)
                        #+nil(:wild))))))
-    (rec query)))
+    (rec (query-of query))))
 
 (defun words-and-patterns-of-full-text-query (q)
   ;; Q has a restricted form (for now): one which allows term, exact
