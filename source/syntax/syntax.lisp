@@ -44,6 +44,9 @@
     :type sql-type)
    (suppress-unquoting
     :type boolean
+    :initform nil)
+   (force-unquoting
+    :type boolean
     :initform nil))
   (:documentation "Represents an SQL literal.")
   (:format-sql-syntax-node
@@ -197,7 +200,10 @@
 
 (def function unquote-aware-format-sql-literal (literal)
   (bind ((type (type-of literal)))
-    (if (and type (not (suppress-unquoting-p literal)))
+    (if (or (and type (not (suppress-unquoting-p literal)))
+            #+nil(force-unquoting-p literal)
+            (typep (value-of literal) 'baumdb-impl::dummy)
+            (typep (value-of literal) 'sql-full-text-search-query))
         (progn
           (vector-push-extend nil *binding-variables*)
           (vector-push-extend type *binding-types*)

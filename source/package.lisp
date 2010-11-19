@@ -51,6 +51,8 @@
            #:sql-cond
            #:sql-if
            #:sql-full-text-search-query
+           #:sql-full-text-search-query-outer-function
+           ;; #:sql-full-text-search-query-inner-function
            #:suppress-unquoting-p
 
            #:mark-transaction-for-commit-only
