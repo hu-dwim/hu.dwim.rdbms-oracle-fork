@@ -92,46 +92,11 @@
      (database postgresql))
    t)
 
-;;; David's divert-command-elements code (Finding the unquote's
-;;; binding variable index)
+;;; SQL-FULL-TEXT-SEARCH-QUERY-OUTER-FUNCTION
 
-(defun divert-command-elements (node)
-  (let ((*command-elements* (make-array 1 :fill-pointer 1 :adjustable t)))
-    (vector-push-extend (with-output-to-string (*sql-stream*)
-			  (format-sql-syntax-node node *database*))
-			*command-elements*)
-    (map 'list
-	 (lambda (x) (if (stringp x) `(write-string ,x *sql-stream*) x))
-	 *command-elements*)))
-
-(defun invoke-diverting-command-elements (fun arg-node)
-  (let ((v (divert-command-elements arg-node)))
-    (push-form-into-command-elements
-     `(let* ((my)
-             (idx (length *binding-types*))
-	     (diverted-sql
-	      (with-output-to-string (*sql-stream*)
-		(let ((*binding-variables* (make-array 16 :adjustable #t :fill-pointer 0))
-                      (*binding-types* (make-array 16 :adjustable #t :fill-pointer 0))
-                      (*binding-values* (make-array 16 :adjustable #t :fill-pointer 0)))
-                  (describe (second (second (third ',v))))
-                  (print (list '========== ,(second (second (third v)))))
-                  ,@v
-                  (assert (eql (length *binding-types*) 1))
-                  (setf my (vector-pop *binding-values*))))))
-	(assert (eql (length *binding-types*) idx #+nil(1+ idx)))
-	,(funcall fun 'my #+nil`(elt *binding-values* idx))))))
-
-(defmacro diverting-command-elements ((value-getter arg-node) &body body)
-  `(invoke-diverting-command-elements (lambda (,value-getter) ,@body)
-				      ,arg-node))
-
-(defmacro write-diverted-sql ()
-  `(write-string diverted-sql *sql-stream*))
-
-(defun check-unquoted-lexical-variable (syntax-node)
-  (assert (typep syntax-node 'sql-unquote))
-  (let ((form (form-of syntax-node)))
+(defun the-unquoted-lexical-variable (x)
+  (assert (typep x 'sql-unquote))
+  (let ((form (form-of x)))
     (unless (and (listp form)
 		 (eq (car form) 'hu.dwim.perec::value->sql-literal))
       (error "sql-test does not support the argument ~A" form))
@@ -139,44 +104,37 @@
 	(cdr form)
       (declare (ignore type args))
       (unless (typep var 'hu.dwim.perec::lexical-variable)
-	(error "sql-test does not support the variable ~A" var)))))
-
-(defun the-unquoted-lexical-variable (x)
-  (check-unquoted-lexical-variable x)
-  x)
-
-;;; SQL-FULL-TEXT-SEARCH-QUERY-OUTER-FUNCTION
+	(error "sql-test does not support the variable ~A" var))
+      var)))
 
 (def method format-sql-syntax-node
   ((x sql-full-text-search-query-outer-function) (database postgresql))
-  (diverting-command-elements
-      (value-form (the-unquoted-lexical-variable (hu.dwim.rdbms::query-of x)))
-    `(if t #+nil(search "test" ,value-form)
-         (progn
-           (print (list '@@@@@@@@@-1 ,value-form (baumdb-impl::one ,value-form)))
-           ;;(setf (baumdb-impl::one ,value-form) "YES")
-           (setf ,value-form "TRUE")
-           (print (list '@@@@@@@@@-2 ,value-form))
-           ;;(print (list '@@@@@@@@@-2 ,value-form (baumdb-impl::one ,value-form)))
-           ;; (print (list '@@@@@@@@@-1 ,value-form))
-           ;; (print (list '@@@@@@@@@-1 (query-of ,value-form)))
-           ;; ;;(print (list '@@@@@@@@@-2 (setf (query-of ,value-form) "YES")))
-           ;; (print (list '@@@@@@@@@-3 (setf ,value-form "YES")))
-           ;;(format-string "'<<<' || '")
-           ;;(write-diverted-sql)
-           (format-string ,value-form)
-           ;;(format-string "YES")
-           ;;(format-sql-syntax-node (baumdb-impl::one ,value-form) *database*)
-           ;;(format-sql-syntax-node ,value-form *database*)
-           ;;(format-string "' || '>>>'")
-           #+nil
-           (setf ,value-form (concatenate 'string
-                                          "["
-                                          ,value-form
-                                          "|"
-                                          ,value-form
-                                          "]")))
-         (write-diverted-sql)))
+  (let ((value-form (the-unquoted-lexical-variable (hu.dwim.rdbms::query-of x))))
+    (push-form-into-command-elements
+     `(progn
+        (print (list '@@@@@@@@@-1 ,value-form (baumdb-impl::one ,value-form)))
+        ;;(setf (baumdb-impl::one ,value-form) "YES")
+        (setf ,value-form "TRUE")
+        (print (list '@@@@@@@@@-2 ,value-form))
+        ;;(print (list '@@@@@@@@@-2 ,value-form (baumdb-impl::one ,value-form)))
+        ;; (print (list '@@@@@@@@@-1 ,value-form))
+        ;; (print (list '@@@@@@@@@-1 (query-of ,value-form)))
+        ;; ;;(print (list '@@@@@@@@@-2 (setf (query-of ,value-form) "YES")))
+        ;; (print (list '@@@@@@@@@-3 (setf ,value-form "YES")))
+        ;;(format-string "'<<<' || '")
+        ;;(write-diverted-sql)
+        (format-string ,value-form)
+        ;;(format-string "YES")
+        ;;(format-sql-syntax-node (baumdb-impl::one ,value-form) *database*)
+        ;;(format-sql-syntax-node ,value-form *database*)
+        ;;(format-string "' || '>>>'")
+        #+nil
+        (setf ,value-form (concatenate 'string
+                                       "["
+                                       ,value-form
+                                       "|"
+                                       ,value-form
+                                       "]")))))
   #+nil
   (let* ((var (hu.dwim.rdbms::var-of x))
          (val (cdar *full-text-search-query-bindings*))) ;; TODO THL find the right value based on var
