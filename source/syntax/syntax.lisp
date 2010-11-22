@@ -198,7 +198,8 @@
 (def function unquote-aware-format-sql-literal (literal)
   (bind ((type (type-of literal)))
     (if (or (and type (not (suppress-unquoting-p literal)))
-            (typep (value-of literal) 'sql-full-text-search-query))
+            (and (eq :postgresql (backend-type *database*)) ;; TODO THL move to backend package
+                 (typep (value-of literal) 'sql-full-text-search-query)))
         (progn
           (vector-push-extend nil *binding-variables*)
           (vector-push-extend type *binding-types*)
