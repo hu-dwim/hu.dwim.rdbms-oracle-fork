@@ -44,9 +44,6 @@
     :type sql-type)
    (suppress-unquoting
     :type boolean
-    :initform nil)
-   (force-unquoting
-    :type boolean
     :initform nil))
   (:documentation "Represents an SQL literal.")
   (:format-sql-syntax-node
