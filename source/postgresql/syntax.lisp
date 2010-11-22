@@ -137,7 +137,9 @@
 (defun rewrite-full-text-search-query-outer-function (exp what query)
   ;; similar to full-text-search-query-to-sql but this time creating
   ;; syntax-nodes and fixing the actual query
-  (labels ((rec (q)
+  (labels ((pat (a b c)
+             (format nil "~a~a~a" a b c))
+           (rec (q)
              (etypecase q
                ;; TODO THL the string case
                ;; (string
@@ -146,18 +148,37 @@
                ;;  (princ q s))
                (cons (ecase (car q)
                        (:and
-                        (multiple-value-bind (words patterns)
-                            (words-and-patterns-of-full-text-query q)
+                        (multiple-value-bind (words phrases patterns)
+                            (words-and-phrases-and-patterns-of-full-text-query q)
                           (setf (query-of query) `(:and ,@words))
                           (apply 'sql-and
                                  (append (when words
                                            (list exp))
                                          (loop
-                                            for pattern in patterns
+                                            for phrase in phrases
                                             collect (sql-like
                                                       :string what
-                                                      :pattern pattern
-                                                      :case-sensitive-p nil))))))
+                                                      :pattern phrase
+                                                      :case-sensitive-p nil))
+                                         (loop
+                                            for pattern in patterns
+                                            collect (sql-or
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "^" pattern "$"))
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "^" pattern "[ ]"))
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "[ ]" pattern "[ ]"))
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "[ ]" pattern "$"))))))))
                        ;; TODO THL the rest of the cases
                        #+nil(:or)
                        #+nil(:not)
@@ -165,28 +186,48 @@
                        #+nil(:wild))))))
     (rec (query-of query))))
 
-(defun words-and-patterns-of-full-text-query (q)
-  ;; Q has a restricted form (for now): one which allows term, exact
-  ;; phrase (without wildcards) and single word wildcard search.  For
-  ;; example: (:AND "hello" "hi" (:WILD "wild1" :ANY) (:WILD :ANY
-  ;; "wild2") (:SEQ "einmal" "vor") (:SEQ "zweimal%" "nach")).  The
-  ;; trick here is that we can split the query into two parts: one
-  ;; full text search on words and the other one a LIKE query on the
-  ;; (possibly array) of patterns.  Anything more complicated would
-  ;; most likely mean building and/or/not logic expressions on top of
-  ;; @@ and LIKE expressions.
+(defun words-and-phrases-and-patterns-of-full-text-query (q)
+  ;; Q has a restricted form (for now): one which allows term (a
+  ;; word), exact phrase (without wildcards) and single word wildcard
+  ;; search (a pattern).  For example: (:AND "hello" "hi" (:WILD
+  ;; "wild1" :ANY) (:WILD :ANY "wild2") (:SEQ "einmal" "vor") (:SEQ
+  ;; "zweimal%" "nach")).  The trick here is that we can split the
+  ;; query into three parts: one full text search on words and the
+  ;; other one an ILIKE query on the (possibly array) of phrases and ~
+  ;; queries on patterns.  Anything more complicated would most likely
+  ;; mean building and/or/not logic expressions on top of @@, ILIKE
+  ;; and ~ expressions.  For the phrase and pattern search to work,
+  ;; the data must be a list of words all on one line separated by
+  ;; single space.
   (let ((words nil)
+        (phrases nil)
         (patterns nil))
     (assert (eq :and (car q)))
     (dolist (x (cdr q))
       (etypecase x
         (string (push x words)) ;; pg doesn't interpret wildcards here
-        (cons (flet ((escape (x s)
+        (cons (flet ((escape-like (x s)
                        (loop
                           for c across x
                           do (princ (case c
                                       (#\_ "\\_")
                                       (#\% "\\%")
+                                      (t c))
+                                    s)))
+                     (escape-regexp (x s)
+                       (loop
+                          for c across x
+                          do (princ (case c
+                                      (#\. "[.]")
+                                      (#\* "[*]")
+                                      (#\^ "[^]")
+                                      (#\$ "[$]")
+                                      (#\( "[(]")
+                                      (#\) "[)]")
+                                      (#\| "[|]")
+                                      (#\\ "[\\]")
+                                      (#\[ "\\[")
+                                      (#\] "\\]")
                                       (t c))
                                     s))))
                 (ecase (car x)
@@ -201,14 +242,16 @@
                                         (when (plusp n)
                                           (princ " " s))
                                         (etypecase y
-                                          (string (escape y s)))))
+                                          (string (escape-like y s)))))
                                 (princ "%" s))
-                              patterns))
+                              phrases))
                   (:wild (push (with-output-to-string (s)
                                  (dolist (y (cdr x))
                                    (case y
-                                     (:one (princ "_" s))
-                                     (:any (princ "%" s))
-                                     (t (escape y s)))))
+                                     (:one (princ "[^ ]" s))
+                                     (:any (princ "[^ ]*" s))
+                                     (t (escape-regexp y s)))))
                                patterns)))))))
-    (values (nreverse words) (nreverse patterns))))
+    (values (nreverse words)
+            (nreverse phrases)
+            (nreverse patterns))))
