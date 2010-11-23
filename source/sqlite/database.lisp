@@ -23,9 +23,11 @@
 (def class* sqlite-prepared-statement (prepared-statement)
   ((statement-pointer nil)))
 
+(def constant +maximum-rdbms-name-length+ 30)
+
 ;; this name mapping is not injective, different lisp names _may_ be mapped to the same rdbms name
 (def method calculate-rdbms-name ((db sqlite) thing name)
-  (calculate-rdbms-name-with-utf-8-length-limit name 30))
+  (calculate-rdbms-name-with-utf-8-length-limit name +maximum-rdbms-name-length+ :prefix "_"))
 
 (def function process-error (tr message &rest args)
   (apply 'process-error-code (hu.dwim.rdbms.sqlite.cffi:sqlite-3-errcode (connection-pointer-of tr))
