@@ -113,12 +113,14 @@
   (declare (cl:type (or null (member :table :view :index :column :sequence)) thing))
   (calculate-rdbms-name *database* thing name))
 
-(def function calculate-rdbms-name-with-utf-8-length-limit (name limit &key prefix)
+(def function calculate-rdbms-name-with-utf-8-length-limit (name limit)
   "Cuts off the end of names that are too long and appends the hash of the original name."
   (assert (>= limit 8))
-  (let ((name-as-string (string+ prefix (string-downcase name))))
+  (let ((name-as-string (string-downcase name)))
     (iter (for char :in-sequence "+*\\/-~%")
           (nsubstitute #\_ char name-as-string :test #'char=))
+    (unless (find #\_ name-as-string :test #'char=)
+      (setq name-as-string (string+ name-as-string "_")))
     (let ((name-as-bytes (string-to-octets name-as-string :encoding :utf-8)))
       (when (> (length name-as-bytes)
                limit)

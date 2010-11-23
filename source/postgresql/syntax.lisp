@@ -16,7 +16,7 @@
 				    (database postgresql))
   (with-slots (class-id table-name column-name) node
       (format *sql-stream*
-	      "ALTER TABLE ~A ALTER COLUMN ~A SET DEFAULT ((NEXTVAL('_instance_id') << ~D) | ~D)"
+	      "ALTER TABLE ~A ALTER COLUMN ~A SET DEFAULT ((NEXTVAL('instance_id') << ~D) | ~D)"
 	      table-name
 	      column-name
 	      hu.dwim.perec::+oid-class-id-bit-size+

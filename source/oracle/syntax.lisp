@@ -99,12 +99,6 @@
 ;;;;;;
 ;;; Identifiers
 
-(def method format-sql-identifier :around ((identifier string) (database oracle))
-  (progn
-    (write-char #\" *sql-stream*)
-    (call-next-method)
-    (write-char #\" *sql-stream*)))
-
 (def special-variable *oracle-sql-reserved-words* (make-hash-table :test 'equal))
 
 (eval-when (:load-toplevel)
@@ -481,11 +475,11 @@
   (with-slots (table-name column-name class-id)
       node
     (format *sql-stream*
-	    "CREATE OR REPLACE TRIGGER \"~a\" BEFORE INSERT ON \"~a\" FOR EACH ROW BEGIN SELECT (CASE WHEN :new.\"~A\" IS NULL THEN ((\"_instance_id\".NEXTVAL * power(2,~a)) + ~a) ELSE :new.\"~A\" END) into :new.\"~A\" FROM dual; END;"
+	    "CREATE OR REPLACE TRIGGER ~a BEFORE INSERT ON ~a FOR EACH ROW BEGIN SELECT (CASE WHEN :new.~a IS NULL THEN ((instance_id.NEXTVAL * power(2,~a)) + ~a) ELSE :new.~a END) into :new.~a FROM dual; END;"
 	    (hu.dwim.rdbms::calculate-rdbms-name
 	     database
 	     :trigger
-	     (concatenate 'string table-name "_t"))
+	     (concatenate 'string table-name "_t")) ;; TODO THL fix xxx__t etc
 	    table-name
 	    column-name
 	    hu.dwim.perec::+oid-class-id-bit-size+
