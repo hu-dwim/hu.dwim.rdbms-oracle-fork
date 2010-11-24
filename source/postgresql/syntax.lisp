@@ -135,8 +135,14 @@
   (format-sql-syntax-node *inner-function-replacement* database))
 
 (defun rewrite-full-text-search-query-outer-function (exp what query)
-  ;; similar to full-text-search-query-to-sql but this time creating
-  ;; syntax-nodes and fixing the actual query
+  ;; Similar to full-text-search-query-to-sql but this time creating
+  ;; syntax-nodes and fixing the actual query.
+  ;;
+  ;; IMPORTANT: For the phrase and pattern search to work, the data
+  ;; must be a list of words all on one line separated by single
+  ;; space.  The first word must be preceded by a space and the last
+  ;; word must be followed by a space.  It is the responsibility of
+  ;; the application to provide data in this format.
   (labels ((pat (a b c)
              (format nil "~a~a~a" a b c))
            (rec (q)
@@ -162,23 +168,10 @@
                                                       :case-sensitive-p nil))
                                          (loop
                                             for pattern in patterns
-                                            collect (sql-or
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "^" pattern "$"))
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "^" pattern "[ ]"))
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "[ ]" pattern "[ ]"))
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "[ ]" pattern "$"))))))))
+                                            collect (sql-binary-operator
+                                                      :name "~"
+                                                      :left what
+                                                      :right (pat "[ ]" pattern "[ ]")))))))
                        ;; TODO THL the rest of the cases
                        #+nil(:or)
                        #+nil(:not)
@@ -196,9 +189,7 @@
   ;; other one an ILIKE query on the (possibly array) of phrases and ~
   ;; queries on patterns.  Anything more complicated would most likely
   ;; mean building and/or/not logic expressions on top of @@, ILIKE
-  ;; and ~ expressions.  For the phrase and pattern search to work,
-  ;; the data must be a list of words all on one line separated by
-  ;; single space.
+  ;; and ~ expressions.
   (let ((words nil)
         (phrases nil)
         (patterns nil))
