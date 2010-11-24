@@ -168,10 +168,23 @@
                                                       :case-sensitive-p nil))
                                          (loop
                                             for pattern in patterns
-                                            collect (sql-binary-operator
-                                                      :name "~"
-                                                      :left what
-                                                      :right (pat "[ ]" pattern "[ ]")))))))
+                                            collect (sql-or
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "^" pattern "$"))
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "^" pattern "[ ]"))
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "[ ]" pattern "[ ]"))
+                                                     (sql-binary-operator
+                                                       :name "~"
+                                                       :left what
+                                                       :right (pat "[ ]" pattern "$"))))))))
                        ;; TODO THL the rest of the cases
                        #+nil(:or)
                        #+nil(:not)
