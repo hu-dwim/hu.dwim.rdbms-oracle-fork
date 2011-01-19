@@ -80,6 +80,11 @@
     (sql-character-varying-type)
   ())
 
+(def syntax-node sql-tsvector-type (sql-simple-type)
+  ()
+  (:format-sql-syntax-node
+   (format-string "TSVECTOR")))
+
 (def method equal-type-p ((type-1 sql-character-varying-type)
 			  (type-2 sql-character-varying-type/without-size-if-possible)
 			  (database t))

@@ -25,7 +25,8 @@
     ;; index properties for oracle
     ;; http://download.oracle.com/docs/cd/B13789_01/server.101/b10759/statements_5010.htm#i2138869
     nil
-    :type string))
+    :type string)
+   (triggers nil :type list)) ;; list of strings
   (:documentation "An SQL index specification."))
 
 (def syntax-node sql-create-index (sql-ddl-statement sql-index)

@@ -44,6 +44,7 @@
                        ("varchar" (make-instance 'sql-character-varying-type
                                                  :size (native-size (elt description 2))))
                        ("text" (make-instance 'sql-character-large-object-type))
+                       ("tsvector" (make-instance 'sql-tsvector-type))
                        ("bytea" (make-instance 'sql-binary-large-object-type))
                        ("date" (make-instance 'sql-date-type))
                        ("time" (make-instance 'sql-time-type))
