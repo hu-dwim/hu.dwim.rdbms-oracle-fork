@@ -73,8 +73,7 @@
   
   (:method ((literal string) database)
            (format-char "'")
-           ;; TODO: solve escaping
-           (format-string literal)
+           (format-string (sexp2sql:escape-sql-string literal))
            (format-char "'"))
 
   (:method ((literal list) database)
