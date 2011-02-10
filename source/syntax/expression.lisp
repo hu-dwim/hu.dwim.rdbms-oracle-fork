@@ -411,6 +411,15 @@
                  (cons (cond
                          ((eq :wild (car q))
                           (p (cdr q)))
+                         ((eq :within (car q)) ;; http://download.oracle.com/docs/cd/B19306_01/text.102/b14218/cqoper.htm#i998525
+                          (let ((x (cadr q))
+                                (section (caddr q)))
+                            (if (consp section)
+                                (rec (cons :or
+                                           (loop
+                                              for s in section
+                                              collect (list :within x s))))
+                                (p (list x) nil nil (format nil " within ~a" section))))) ;; TODO THL escape section name e.g. _ see doc?
                          ((cddr q)
                           (p (cdr q)
                              (if (and (eq :postgresql backend)
