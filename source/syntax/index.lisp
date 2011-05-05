@@ -57,6 +57,7 @@
 	 (labels ((shorten-columns (node)
 		    (etypecase node
                       (sql-literal)
+                      (sql-fragment) ;; allow sexp2sql
 		      (sql-function-call
 			(setf (arguments-of node)
 			      (mapcar #'shorten-columns
