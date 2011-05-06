@@ -24,7 +24,30 @@
 
 (def special-variable *cl-postgres-sql-readtable* (cl-postgres:copy-sql-readtable))
 
-(local-time:set-local-time-cl-postgres-readers *cl-postgres-sql-readtable*)
+(defconstant +postgres-day-offset+ -60)
+(defun postgres-days-to-simple-date (days)
+  (make-instance 'simple-date:date :days (+ days +postgres-day-offset+)))
+
+(defun set-rdbms-cl-postgres-readers
+    (&optional (table *cl-postgres-sql-readtable*))
+  ;; like SET-LOCAL-TIME-CL-POSTGRES-READERS, but...
+  (local-time:set-local-time-cl-postgres-readers table)
+  ;; ... override date reading using SIMPLE-DATE first, then going to CDATE:
+  (cl-postgres:set-sql-datetime-readers
+   :date (lambda (days)
+	   (simple-date-to-cdate (postgres-days-to-simple-date days)))
+   :table table))
+
+(set-rdbms-cl-postgres-readers)
+
+(def (function e) simple-date-to-cdate (simple-date)
+  (multiple-value-bind (y m d)
+      (simple-date:decode-date simple-date)
+    (make-cdate y m d)))
+
+(def (function e) cdate-to-simple-date (cdate)
+  (multiple-value-bind (y m d) (decode-cdate cdate)
+    (simple-date:encode-date y m d)))
 
 (def function execute-prepared-statement (connection statement-name &key binding-types binding-values visitor result-type &allow-other-keys)
   (bind ((cl-postgres:*sql-readtable* *cl-postgres-sql-readtable*))
@@ -46,8 +69,11 @@
                        :null)
                       (t
                        (etypecase type
+                         (sql-date-type
+                          (etypecase value
+			    (string value)
+			    (cdate (cdate-to-iso-string value))))
                          ((or sql-timestamp-type
-                              sql-date-type
                               sql-time-type)
                           (if (stringp value)
                               ;; we let the user talk to PostgreSQL directly using strings
@@ -58,13 +84,6 @@
                                   ;; so we are safe to send down UTC timestamps if we will also parse them back in UTC.
                                   ;; Random useful and somewhat related info: http://forums.mor.ph/forums/8/topics/189
                                   (local-time:format-rfc3339-timestring nil value :timezone local-time:+utc-zone+))
-                                (sql-date-type
-                                  (unless (and (zerop (local-time:sec-of value))
-                                               (zerop (local-time:nsec-of value)))
-                                    (cerror "continue"
-                                            "Binding a local-time date value as ~S with non-zero time values; time values will be silently dropped! The bound value in question is: ~A"
-                                            'sql-date-type value))
-                                  (local-time:format-rfc3339-timestring nil value :omit-time-part #t :timezone local-time:+utc-zone+))
                                 (sql-time-type
                                   (unless (zerop (local-time:day-of value))
                                     (cerror "continue"

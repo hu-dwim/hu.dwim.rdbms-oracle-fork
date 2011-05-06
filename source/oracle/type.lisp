@@ -69,15 +69,15 @@
     :allocate-instance 'allocate-oci-lob-locator
     :free-instance 'free-oci-lob-locator)
 
-(def typemap local-time/date
+(def typemap cdate/date
     :external-type oci:+sqlt-dat+
-    :lisp-to-oci 'local-time-to-date
-    :oci-to-lisp 'local-time-from-date)
+    :lisp-to-oci 'cdate-to-date
+    :oci-to-lisp 'cdate-from-date)
 
-(def typemap local-time/oci-date
+(def typemap cdate/oci-date
     :external-type oci:+sqlt-odt+
-    :lisp-to-oci 'local-time-to-oci-date
-    :oci-to-lisp 'local-time-from-oci-date)
+    :lisp-to-oci 'cdate-to-oci-date
+    :oci-to-lisp 'cdate-from-oci-date)
 
 (def typemap local-time/time
     :external-type oci:+sqlt-timestamp+
