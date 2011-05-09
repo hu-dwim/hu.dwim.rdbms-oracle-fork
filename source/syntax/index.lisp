@@ -16,6 +16,10 @@
     ;; allows columns or full expressions (if the database supports that)
     nil
     :type list)
+   (where
+    ;; e.g. http://www.postgresql.org/docs/8.4/static/indexes-partial.html
+    nil
+    :type list)
    (using
     ;; e.g. [USING method] for postgresql
     ;; http://www.postgresql.org/docs/8.2/static/sql-createindex.html
@@ -28,6 +32,25 @@
     :type string)
    (triggers nil :type list)) ;; list of strings
   (:documentation "An SQL index specification."))
+
+;; Oracle doesn't permit table_name.column_name in index expressions,
+;; and the table_name is redundant anyway, so let's strip it
+;; unconditionally:
+(defun %shorten-columns (node)
+  (etypecase node
+    (sql-literal)
+    (sql-fragment) ;; allow sexp2sql
+    (sql-unary-operator
+      (setf (expression-of node)
+            (%shorten-columns (expression-of node))))
+    (sql-function-call
+      (setf (arguments-of node)
+            (mapcar #'%shorten-columns (arguments-of node))))
+    (sql-index-operation
+      (setf (value-of node) (%shorten-columns (value-of node))))
+    (sql-column-alias
+      (setf (table-of node) nil)))
+  node)
 
 (def syntax-node sql-create-index (sql-ddl-statement sql-index)
   ()
@@ -48,27 +71,12 @@
     columns
     (lambda (node db)
       (typecase node
-	(sql-column
-	  (funcall 'format-sql-identifier node db))
-	(t
-	 ;; Oracle doesn't permit table_name.column_name in
-	 ;; index expressions, and the table_name is redundant
-	 ;; anyway, so let's strip it unconditionally:
-	 (labels ((shorten-columns (node)
-		    (etypecase node
-                      (sql-literal)
-		      (sql-function-call
-			(setf (arguments-of node)
-			      (mapcar #'shorten-columns
-				      (arguments-of node))))
-		      (sql-index-operation
-			(setf (value-of node)
-			      (shorten-columns (value-of node))))
-		      (sql-column-alias
-			(setf (table-of node) nil)))
-		    node))
-	   (funcall 'format-sql-syntax-node (shorten-columns node) db))))))
+	(sql-column (funcall 'format-sql-identifier node db))
+	(t (funcall 'format-sql-syntax-node (%shorten-columns node) db)))))
    (format-char ")")
+   (when where
+     (format-string " WHERE ")
+     (funcall 'format-sql-syntax-node (%shorten-columns where) *database*))
    (when properties
      (format-string " ")
      (format-string properties))))

@@ -110,7 +110,8 @@
            (string-downcase name)))
 
 (def function rdbms-name-for (name &optional thing)
-  (declare (cl:type (or null (member :table :view :index :column :sequence)) thing))
+  (declare (cl:type (or null (member :table :view :index :column :sequence
+                                     :composite-unique-constraint)) thing))
   (calculate-rdbms-name *database* thing name))
 
 (def function calculate-rdbms-name-with-utf-8-length-limit (name limit &key prefix)

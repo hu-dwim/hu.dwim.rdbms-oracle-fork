@@ -98,7 +98,8 @@
            #:drop-table-foreign-keys
            #:*signal-non-destructive-alter-table-commands*
 	   #:oid-default-statement-of
-
+           #:sql-create-composite-unique-constraint
+           #:sql-drop-composite-unique-constraint
            #:backend-type
 
            #:simple-rdbms-error

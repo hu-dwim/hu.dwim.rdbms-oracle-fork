@@ -68,3 +68,26 @@
     (format-string " CONSTRAINT")
     (format-char " ")
     (format-sql-syntax-node it database)))
+
+(def syntax-node sql-create-composite-unique-constraint (sql-ddl-statement)
+  ((name :type string)
+   (table :type string)
+   (columns :type (list string)))
+  (:format-sql-syntax-node
+   (format-string "ALTER TABLE ")
+   (format-sql-identifier table)
+   (format-string " ADD CONSTRAINT ")
+   (format-sql-identifier name)
+   (format-string " UNIQUE (")
+   (format-separated-list columns ", " (lambda (x db)
+                                         (format-sql-identifier (column-of x))))
+   (format-string  ") ")))
+
+(def syntax-node sql-drop-composite-unique-constraint (sql-ddl-statement)
+  ((name :type string)
+   (table :type string))
+  (:format-sql-syntax-node
+   (format-string "ALTER TABLE ")
+   (format-sql-identifier table)
+   (format-string " DROP CONSTRAINT ")
+   (format-sql-identifier name)))
