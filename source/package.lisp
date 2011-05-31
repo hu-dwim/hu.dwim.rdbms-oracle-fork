@@ -54,6 +54,7 @@
            #:sql-full-text-search-query-outer-function
            #:sql-full-text-search-query-inner-function
            #:suppress-unquoting-p
+           #:*suppress-unquoting*
 
            #:mark-transaction-for-commit-only
            #:mark-transaction-for-rollback-only
