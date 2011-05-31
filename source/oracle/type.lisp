@@ -160,7 +160,7 @@
            string/clob)
 
   (:method ((type sql-date-type))
-           local-time/date)
+           cdate/date)
 
   (:method ((type sql-time-type))
            local-time/time)
@@ -228,7 +228,7 @@
      (if (and (<= scale 0) (<= (- precision scale) 9))
          integer/varnum
          rational/varnum))
-    (#.oci:+sqlt-dat+ local-time/date)
+    (#.oci:+sqlt-dat+ cdate/date)
     (#.oci:+sqlt-ibfloat+ float/bfloat)
     (#.oci:+sqlt-ibdouble+ double/bdouble)
     (#.oci:+sqlt-timestamp+ local-time/timestamp)    ; CHECK: was 180
