@@ -23,6 +23,11 @@
   (print-unreadable-object (object stream :type t :identity nil)
     (format-cdate-iso-string object stream)))
 
+(def (function e) cdate= (a b)
+  (and (eql (y-of a) (y-of b))
+       (eql (m-of a) (m-of b))
+       (eql (d-of a) (d-of b))))
+
 (def (function e) decode-cdate (cdate)
   (values (y-of cdate) (m-of cdate) (d-of cdate)))
 
@@ -45,7 +50,7 @@
   (unless (and (zerop (local-time:sec-of value))
 	       (zerop (local-time:nsec-of value)))
     (cerror "continue"
-	    "Binding a local-time date value as ~S with non-zero time values; time values will be silently dropped! The bound value in question is: ~A"
+	    "Converting a local-time date value as ~S with non-zero time values; time values will be silently dropped! The timestamp in question is: ~A"
 	    'sql-date-type value))
   (multiple-value-bind (nsec sec minute hour day month year)
       (local-time:decode-timestamp value :timezone local-time:+utc-zone+)
