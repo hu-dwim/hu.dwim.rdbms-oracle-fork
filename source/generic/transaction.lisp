@@ -236,7 +236,7 @@
 
 (def (function io) assert-transaction-in-progress ()
   (unless (in-transaction-p)
-    (error 'transaction-error :format-control "No transaction in progress and implicit transactions are turned off.~%Please either use WITH-TRANSACTION, or BEGIN/COMMIT/ROLLBACK, or set *IMPLICIT-TRANSACTION* and *IMPLICIT-TRANSACTION-DEFAULT-TERMINAL-ACTION* accodring to your needs.")))
+    (error 'transaction-error :error-message "No transaction in progress and implicit transactions are turned off.~%Please either use WITH-TRANSACTION, or BEGIN/COMMIT/ROLLBACK, or set *IMPLICIT-TRANSACTION* and *IMPLICIT-TRANSACTION-DEFAULT-TERMINAL-ACTION* accodring to your needs.")))
 
 (def (function ioe) begin (&rest args)
   "Starts a new transaction. This transaction must be closed by an explicit call to either ROLLBACK or COMMIT. See with-transaction for convenience and safety. This is for debug purposes."
