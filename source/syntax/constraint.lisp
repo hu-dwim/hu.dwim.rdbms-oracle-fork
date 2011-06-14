@@ -91,3 +91,25 @@
    (format-sql-identifier table)
    (format-string " DROP CONSTRAINT ")
    (format-sql-identifier name)))
+
+(def syntax-node sql-create-check-constraint (sql-ddl-statement)
+  ((name :type string)
+   (table :type string)
+   (expression :type string))
+  (:format-sql-syntax-node
+   (format-string "ALTER TABLE ")
+   (format-sql-identifier table)
+   (format-string " ADD CONSTRAINT ")
+   (format-sql-identifier name)
+   (format-string " CHECK (")
+   (format-sql-syntax-node (%shorten-columns expression))
+   (format-string  ") ")))
+
+(def syntax-node sql-drop-check-constraint (sql-ddl-statement)
+  ((name :type string)
+   (table :type string))
+  (:format-sql-syntax-node
+   (format-string "ALTER TABLE ")
+   (format-sql-identifier table)
+   (format-string " DROP CONSTRAINT ")
+   (format-sql-identifier name)))

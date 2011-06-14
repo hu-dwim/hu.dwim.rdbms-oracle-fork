@@ -43,6 +43,12 @@
     (sql-unary-operator
       (setf (expression-of node)
             (%shorten-columns (expression-of node))))
+    (sql-binary-operator
+      (setf (left-of node) (%shorten-columns (left-of node))
+            (right-of node) (%shorten-columns (right-of node))))
+    (sql-n-ary-operator
+      (setf (expressions-of node)
+            (mapcar '%shorten-columns (expressions-of node))))
     (sql-function-call
       (setf (arguments-of node)
             (mapcar #'%shorten-columns (arguments-of node))))

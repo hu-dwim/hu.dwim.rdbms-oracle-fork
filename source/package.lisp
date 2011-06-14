@@ -54,6 +54,7 @@
            #:sql-full-text-search-query-outer-function
            #:sql-full-text-search-query-inner-function
            #:suppress-unquoting-p
+           #:*suppress-unquoting*
 
            #:mark-transaction-for-commit-only
            #:mark-transaction-for-rollback-only
@@ -100,6 +101,8 @@
 	   #:oid-default-statement-of
            #:sql-create-composite-unique-constraint
            #:sql-drop-composite-unique-constraint
+           #:sql-create-check-constraint
+           #:sql-drop-check-constraint
            #:backend-type
 
            #:simple-rdbms-error

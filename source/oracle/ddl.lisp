@@ -254,3 +254,13 @@
                            AND c4.constraint_type = 'R'"
 		(database-effective-schema database)
 		(string-downcase table-name)))))
+
+
+(def method database-list-table-check-constraints (name (database oracle))
+  (map 'list
+       (lambda (row) (elt row 0))
+       (execute
+        (format nil "SELECT constraint_name
+                FROM USER_CONSTRAINTS
+                WHERE constraint_type = 'C' AND table_name = '~a'"
+                (string-downcase name)))))

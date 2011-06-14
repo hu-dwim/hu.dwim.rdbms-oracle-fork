@@ -170,3 +170,13 @@ FROM(SELECT DISTINCT nr.nspname, r.relname, r.relowner, a.attname, nc.nspname,
   (caar (execute (format nil "select definition from pg_views where viewname='~A'"
 			 view-name)
 		 :result-type 'list)))
+
+(def method database-list-table-check-constraints (name (database postgresql))
+  (map 'list
+       (lambda (row) (elt row 0))
+       (execute
+        (format nil "SELECT constraint_name
+                FROM information_schema.table_constraints
+                WHERE constraint_type = 'CHECK' AND table_name = '~a'"
+                (string-downcase name))
+        :result-type 'list)))

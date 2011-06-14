@@ -225,8 +225,8 @@
             (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-mm) month
             (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-dd) day
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh) hh
-            (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh) mm
-            (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh) ss)
+            (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-mi) mm
+            (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-ss) ss)
       (values
        oci-date
        (cffi:foreign-type-size 'oci:date)))))
@@ -250,6 +250,73 @@
                       month
                       year
                       :timezone +utc-zone+)))
+
+(def function cdate-to-date (cdate)
+  (multiple-value-bind (y m d) (decode-cdate cdate)
+    (bind (((:values century year) (floor y 100))
+           (date (cffi:foreign-alloc 'oci:ub-1 :count 7)))
+      (setf (cffi:mem-aref date 'oci:ub-1 0) (+ 100 century) ; TODO check BC dates
+            (cffi:mem-aref date 'oci:ub-1 1) (+ 100 y)
+            (cffi:mem-aref date 'oci:ub-1 2) m
+            (cffi:mem-aref date 'oci:ub-1 3) d
+            (cffi:mem-aref date 'oci:ub-1 4) 0
+            (cffi:mem-aref date 'oci:ub-1 5) 0
+            (cffi:mem-aref date 'oci:ub-1 6) 0)
+      (values date 7))))
+
+(def function cdate-to-oci-date (cdate)
+  ;; FIXME using fields of the opaque OCIDate structure, because the OCIDateSetDate and
+  ;;       OCIDateSetTime macros are not available
+  (multiple-value-bind (y m d) (decode-cdate cdate)
+    (bind ((oci-date (cffi:foreign-alloc 'oci:date))
+           (oci-time (cffi:foreign-slot-pointer oci-date 'oci:date 'oci::date-time)))
+      (setf (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-yyyy) year
+            (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-mm) month
+            (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-dd) day
+            (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh) 0
+            (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-mi) 0
+            (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-ss) 0)
+      (values
+       oci-date
+       (cffi:foreign-type-size 'oci:date)))))
+
+(def function cdate-from-date (ptr len)
+  (assert (= len 7))
+  (let ((century (- (cffi:mem-aref ptr 'oci:ub-1 0) 100)) ; TODO BC dates
+        (year (- (cffi:mem-aref ptr 'oci:ub-1 1) 100))
+        (month (cffi:mem-aref ptr 'oci:ub-1 2))
+        (day (cffi:mem-aref ptr 'oci:ub-1 3))
+        (hour (1- (cffi:mem-aref ptr 'oci:ub-1 4)))
+        (min (1- (cffi:mem-aref ptr 'oci:ub-1 5)))
+        (sec (1- (cffi:mem-aref ptr 'oci:ub-1 6))))
+    (macrolet ((check-zero (var)
+		 `(unless (zerop ,var)
+		    (error "expected a calendar date, found non-zero ~A ~A"
+			   ',var ,var))))
+      (check-zero hour)
+      (check-zero min)
+      (check-zero sec))
+    (make-cdate (+ (* 100 century) year) month day)))
+
+(def function cdate-from-oci-date (ptr len)
+  ;; FIXME using fields of the opaque OCIDate structure, because the OCIDateGetDate and
+  ;;       OCIDateGetTime macros are not available
+  (assert (= len (cffi:foreign-type-size 'oci:date)))
+  (let* ((year (cffi:foreign-slot-value ptr 'oci:date 'oci::date-yyyy))
+         (month (cffi:foreign-slot-value ptr 'oci:date 'oci::date-mm))
+         (day (cffi:foreign-slot-value ptr 'oci:date 'oci::date-dd))
+         (oci-time (cffi:foreign-slot-value ptr 'oci:date 'oci::date-time))
+         (hour (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh))
+         (min (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-mi))
+         (sec (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-ss)))
+    (macrolet ((check-zero (var)
+		 `(unless (zerop ,var)
+		    (error "expected a calendar date, found non-zero ~A ~A"
+			   ',var ,var))))
+      (check-zero hour)
+      (check-zero min)
+      (check-zero sec))
+    (make-cdate year month day)))
 
 (def function local-time-to-time (timestamp)
   (assert (local-time::%valid-time-of-day? timestamp))

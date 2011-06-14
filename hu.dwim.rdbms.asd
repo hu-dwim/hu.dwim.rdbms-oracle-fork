@@ -29,7 +29,8 @@
                                            (:file "database")
                                            (:file "ddl" :depends-on ("transaction"))
                                            (:file "dml" :depends-on ("transaction"))
-                                           (:file "transaction" :depends-on ("database"))))
+                                           (:file "transaction" :depends-on ("database"))
+                                           (:file "date" :depends-on ("database"))))
                              (:module "syntax"
                               :depends-on ("generic")
                               :components ((:file "alter-table" :depends-on ("create-table" "constraint"))
