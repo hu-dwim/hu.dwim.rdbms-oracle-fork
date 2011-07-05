@@ -76,10 +76,83 @@
   (when (cl:null (environment-handle-pointer transaction))
     (connect transaction)))
 
+(def class* oci-environment ()
+  (env-handle
+   (pools :initform (make-hash-table :test 'equal))))
+
+(def class* oci-pool ()
+  (pool-handle
+   pool-name
+   pool-name-len))
+
+(defvar *environments* (make-hash-table))
+
+(defun flush-environments (&key do-not-free)
+  (iter (for (key env) in-hashtable *environments*)
+	(unless do-not-free
+	  (oci-call (oci:handle-free (env-handle-of env) oci:+htype-env+)))
+	(remhash key *environments*)))
+
+(defun create-oci-environment (desired-encoding)
+  (rdbms.debug "Setting up environment for ~A" desired-encoding)
+  (cffi:with-foreign-object (&env :pointer)
+    (oci-call (oci:env-create &env
+			      (logior (ecase desired-encoding
+					(:ascii 0)
+					(:utf-16 oci:+utf-16+))
+				      *default-oci-flags*)
+			      null null null null 0 null))
+    (make-instance 'oci-environment
+		   :env-handle (cffi:mem-ref &env :pointer))))
+
+(defun ensure-oci-environment (desired-encoding)
+  (or (gethash desired-encoding *environments*)
+      (setf (gethash desired-encoding *environments*)
+	    (create-oci-environment desired-encoding))))
+
+(defun create-connection-pool (environment dblink user password)
+  (rdbms.debug "Setting up pool for ~A" environment)
+  (cffi:with-foreign-objects ((&error-handle :pointer)
+			      (&pool :pointer)
+			      (&pool-name :pointer)
+			      (&pool-name-len 'oci:sb-4))
+    (handle-alloc &error-handle oci:+htype-error+)
+    (handle-alloc &pool oci:+htype-cpool+)
+    (let ((error-handle (cffi:mem-ref &error-handle :pointer))
+	  (pool (cffi:mem-ref &pool :pointer)))
+      (with-foreign-oci-string (dblink c-dblink l-dblink)
+	(with-foreign-oci-string (user c-user l-user)
+	  (with-foreign-oci-string (password c-password l-password)
+	    (oci::connection-pool-create (env-handle-of environment)
+					 error-handle
+					 pool
+					 &pool-name &pool-name-len
+					 c-dblink l-dblink
+					 0 100 1
+					 c-user l-user
+					 c-password l-password
+					 oci:+default+))))
+      (make-instance 'oci-pool
+		     :pool-handle pool
+		     :pool-name (oci-string-to-lisp
+				 (cffi:mem-ref &pool-name :pointer)
+				 (cffi:mem-ref &pool-name-len 'oci:sb-4))))))
+
+(defun ensure-connection-pool (environment dblink user password)
+  (let ((table (pools-of environment))
+	(key (list dblink user password)))
+    (or (gethash key table)
+	(setf (gethash key table)
+	      (create-connection-pool environment dblink user password)))))
+
+(defvar *use-connection-pool* t)
+
 (def function connect (transaction)
   (assert (cl:null (environment-handle-pointer transaction)))
   (ensure-oracle-oci-is-loaded)
-  (bind (((&key datasource user-name (password "") schema) (connection-specification-of (database-of transaction))))
+  (bind ((environment (ensure-oci-environment
+		       (connection-encoding-of (database-of *transaction*))))
+	 ((&key datasource user-name (password "") schema) (connection-specification-of (database-of transaction))))
     (macrolet ((alloc (&rest whats)
                  `(progn
                    ,@(loop for what :in whats
@@ -93,15 +166,10 @@
        service-context-handle
        session-handle))
 
-    (rdbms.debug "Connecting in transaction ~A" transaction)
-    (oci-call (oci:env-create (environment-handle-pointer transaction)
-                              (logior
-                               (ecase (connection-encoding-of (database-of *transaction*))
-                                 (:ascii 0)
-                                 (:utf-16 oci:+utf-16+))
-                               *default-oci-flags*)
-                              null null null null 0 null))
+    (setf (cffi:mem-ref (environment-handle-pointer transaction) :pointer)
+	  (env-handle-of environment))
 
+    (rdbms.debug "Connecting in transaction ~A" transaction)
     (handle-alloc (error-handle-pointer transaction) oci:+htype-error+)
     (handle-alloc (server-handle-pointer transaction) oci:+htype-server+)
     (handle-alloc (service-context-handle-pointer transaction) oci:+htype-svcctx+)
@@ -109,7 +177,13 @@
     (iter connecting
           (with-simple-restart (retry "Retry connecting to Oracle")
             (rdbms.debug "Logging on in transaction ~A" transaction)
-            (server-attach datasource)
+            (if *use-connection-pool*
+		(server-attach-using-pool (ensure-connection-pool
+					   environment
+					   datasource
+					   user-name
+					   password))
+		(server-attach datasource))
 
             (oci-call (oci:attr-set (service-context-handle-of transaction)
                                     oci:+htype-svcctx+
@@ -161,6 +235,8 @@
     (rdbms.debug "Calling logoff in transaction ~A" transaction)
     (oci-call (oci:logoff (service-context-handle-of transaction)
                           (error-handle-of transaction))))
+
+  #+nil					;now global
   (ignore-errors*
     (rdbms.debug "Freeing environment handle of transaction ~A" transaction)
     (oci-call (oci:handle-free (environment-handle-of transaction) oci:+htype-env+)))
@@ -173,7 +249,7 @@
                                    (cffi:foreign-free it)
                                    (setf (,accessor transaction) nil))))))
     (dealloc
-     environment-handle
+     #+nil environment-handle		;now global
      error-handle
      server-handle
      service-context-handle

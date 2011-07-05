@@ -127,13 +127,16 @@
                             attribute
                             (error-handle-of *transaction*)))))
 
-(def function server-attach (datasource)
+(def function server-attach (datasource &optional (mode oci:+default+ ))
   (with-foreign-oci-string (datasource c-datasource c-size)
     (oci-call (oci:server-attach (server-handle-of *transaction*)
                                  (error-handle-of *transaction*)
                                  c-datasource
                                  c-size
-                                 oci:+default+))))
+                                 mode))))
+
+(def function server-attach-using-pool (pool)
+  (server-attach (pool-name-of pool) oci:+cpool+))
 
 (def function stmt-prepare (statement command)
   (with-foreign-oci-string (command c-command c-size)
