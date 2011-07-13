@@ -256,12 +256,12 @@
     (bind (((:values century year) (floor y 100))
            (date (cffi:foreign-alloc 'oci:ub-1 :count 7)))
       (setf (cffi:mem-aref date 'oci:ub-1 0) (+ 100 century) ; TODO check BC dates
-            (cffi:mem-aref date 'oci:ub-1 1) (+ 100 y)
+            (cffi:mem-aref date 'oci:ub-1 1) (+ 100 year)
             (cffi:mem-aref date 'oci:ub-1 2) m
             (cffi:mem-aref date 'oci:ub-1 3) d
-            (cffi:mem-aref date 'oci:ub-1 4) 0
-            (cffi:mem-aref date 'oci:ub-1 5) 0
-            (cffi:mem-aref date 'oci:ub-1 6) 0)
+            (cffi:mem-aref date 'oci:ub-1 4) 1
+            (cffi:mem-aref date 'oci:ub-1 5) 1
+            (cffi:mem-aref date 'oci:ub-1 6) 1)
       (values date 7))))
 
 (def function cdate-to-oci-date (cdate)
