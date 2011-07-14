@@ -38,6 +38,12 @@
   (multiple-value-bind (y m d) (decode-cdate cdate)
     (format stream "~4,'0D-~2,'0D-~2,'0D" y m d)))
 
+(def (function e) cdate-from-iso-string (string)
+  (let ((y (parse-integer (subseq string 0 4)))
+        (m (parse-integer (subseq string 5 7)))
+        (d (parse-integer (subseq string 8 10))))
+    (make-cdate y m d)))
+
 ;; when using these functions, take care to think about timezone issues;
 ;; by default we're using CDATE instead of LOCAL-TIME for a reason.
 (def (function e) cdate-local-time (cdate)
@@ -59,3 +65,6 @@
     (assert (zerop minute))
     (assert (zerop hour))
     (make-cdate year month day)))
+
+(def (function e) cdate-from-unix (unix-time)
+  (local-time-to-cdate (local-time:unix-to-timestamp unix-time)))
