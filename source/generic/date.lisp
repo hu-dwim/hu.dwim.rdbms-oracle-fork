@@ -68,3 +68,6 @@
 
 (def (function e) cdate-from-unix (unix-time)
   (local-time-to-cdate (local-time:unix-to-timestamp unix-time)))
+
+(def (function e) cdate-from-universal (universal-time)
+  (local-time-to-cdate (local-time:universal-to-timestamp universal-time)))
