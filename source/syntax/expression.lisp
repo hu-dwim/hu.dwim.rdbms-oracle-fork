@@ -303,6 +303,25 @@
    (format-sql-syntax-node query)
    (format-char ")")))
 
+(def syntax-node sql-project-to (sql-query-expression)
+  ((query :type sql-select)
+   (column))
+  (:format-sql-syntax-node
+   (let ((result-set (gensym))
+	 (col (gensym)))
+     (setf (alias-of (car (columns-of
+			   (query-of
+			    (the sql-subquery query)))))
+	   col)
+     (format-string "(SELECT ")
+     (format-sql-identifier (make-instance 'sql-column-alias
+					   :table result-set
+					   :column col))
+     (format-string " FROM ")
+     (format-sql-syntax-node query)
+     (format-sql-identifier result-set)
+     (format-string ")"))))
+
 (def unary-operator exists)
 
 ;;;;;;

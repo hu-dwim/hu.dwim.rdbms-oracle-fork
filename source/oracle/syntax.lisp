@@ -152,7 +152,14 @@
                          (format-string " ")
                          (funcall fn column database))
                        (when alias
-                         (format-string (format nil " c~d" i)))))
+			 (cond
+			   ((not (and (typep column 'sql-column-alias)
+				      (alias-of column)))
+			    (format-string (format nil " c~d" i)))
+			   ((cl:null source)
+			    (format-string " ")
+			    (format-sql-identifier (alias-of column)
+						   database))))))
                (when rownum
                  (format-string ", ROWNUM n")))
              (format-col (column db)
