@@ -7,9 +7,8 @@
 (in-package :hu.dwim.rdbms.oracle)
 
 (cffi:define-foreign-library oracle-oci
-  (:unix "libocixe.so")
   (:windows (:or "ocixe.dll" "oci.dll"))
-  (t (:default "libocixe")))
+  (t (:default #-x86-64 "libocixe" #+x86-64 "libclntsh"))) ;; TODO THL dont use libocixe?
 
 (def special-variable *oracle-oci-foreign-library* nil)
 
@@ -17,7 +16,13 @@
   (unless *oracle-oci-foreign-library*
     ;; TODO let the user control version, path and stuff (through slots on *database*? if so then *oracle-oci-foreign-library* must be a slot there, too)
     (setf *oracle-oci-foreign-library*
-          (cffi:load-foreign-library 'oracle-oci :search-path (list #P"/usr/lib/oracle/xe/app/oracle/product/10.2.0/client/lib/")))))
+          (cffi:load-foreign-library
+           'oracle-oci
+           :search-path (list
+                         #-x86-64
+                         "/usr/lib/oracle/xe/app/oracle/product/10.2.0/client/lib/"
+                         #+x86-64
+                         "/u01/app/oracle/product/11.2.0/xe/lib/")))))
 
 ;;;;;;
 ;;; Backend API
