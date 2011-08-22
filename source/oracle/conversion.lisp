@@ -510,9 +510,6 @@
 
              result))))
 
-;; quick test case:
-(assert (equalp #(197 3 46 2 68) (rational-to-byte-array 245016700)))
-
 (def function base-100-digits (number)
   "Returns the base-100 digits of NUMBER (a positive integer) as a list, the most significant
 digit is the first or NIL for 0."
@@ -525,6 +522,9 @@ digit is the first or NIL for 0."
                (setf number n)
                (push d digits))
           finally (return (values digits count)))))
+
+;; quick test case:
+(assert (equalp #(197 3 46 2 68) (rational-to-byte-array 245016700)))
 
 (def function timezone-as-HHMM-string (timestamp)
   "Returns the time-zone of TIMESTAMP in [+-]HH:MM format."
