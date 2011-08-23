@@ -254,18 +254,6 @@
   (or (clob-type-p sql-type)
       (blob-type-p sql-type)))
 
-(def function lob-get-length (svchp errhp locator)
-  (cffi:with-foreign-object (len 'oci:ub-4)
-    (oci:lob-get-length svchp errhp locator len)
-    (cffi:mem-ref len 'oci:ub-4)))
-
-(def function lob-read (svchp errhp locator bufp siz &optional amt csid)
-  (cffi:with-foreign-object (amtp 'oci:sb-4)
-    (setf (cffi:mem-ref amtp 'oci:sb-4) (or amt siz))
-    (oci-call (oci:lob-read svchp errhp locator amtp 1 bufp siz null null (or csid 0)
-                            oci:+sqlcs-implicit+))
-    (assert (= (or amt siz) (cffi:mem-ref amtp 'oci:sb-4)))))
-
 (def function lob-write (svchp errhp locator bufp siz &optional amt csid)
   (cffi:with-foreign-object (amtp 'oci:sb-4)
     (setf (cffi:mem-ref amtp 'oci:sb-4) (or amt siz))
@@ -304,42 +292,40 @@
              (lob-write svchp errhp locator bufp siz))
         (cffi:foreign-string-free bufp)))))
 
-(def function download-clob (locator)
-  (let* ((svchp (service-context-handle-of *transaction*))
-         (errhp (error-handle-of *transaction*))
-         (siz (lob-get-length svchp errhp locator)))
-    (if (plusp siz)
-        (let* ((amt siz)
-               (encoding (connection-encoding-of (database-of *transaction*)))
-               (character-width (cffi::null-terminator-len encoding))
-               (siz (+ character-width (* character-width siz)))
-               (bufp (cffi::foreign-alloc :char :count siz)))
-          (unwind-protect
-               (progn
-                 (lob-read svchp errhp locator bufp siz amt oci:+utf-16-id+)
-                 (dotimes (i character-width) ;; \0 terminator
-                   (setf (cffi:mem-aref bufp 'oci:ub-1 (- siz i 1)) 0))
-                 (oci-string-to-lisp bufp siz))
-            (cffi-sys:foreign-free bufp)))
-        (if (zerop siz)
-            ""
-            (error "unexpected clob length ~s" siz)))))
+(defmacro while2 (test &body body) ;; WHILE would clash with ITERATE:-{
+  `(loop while ,test do (progn ,@body)))
 
-(def function download-blob (locator)
+(defun download-lob (locator &optional csid)
   (let* ((svchp (service-context-handle-of *transaction*))
          (errhp (error-handle-of *transaction*))
-         (siz (lob-get-length svchp errhp locator)))
-    (if (plusp siz)
-        (let ((bufp (cffi::foreign-alloc 'oci:ub-1 :count siz))
-              (result (make-array siz :element-type '(unsigned-byte 8))))
-          (unwind-protect
-               (progn
-                 (lob-read svchp errhp locator bufp siz)
-                 (loop
-                    for i from 0 below siz
-                    do (setf (aref result i) (cffi:mem-aref bufp 'oci:ub-1 i)))
-                 result)
-            (cffi:foreign-string-free bufp)))
-        (if (zerop siz)
-            #()
-            (error "unexpected blob length ~s" siz)))))
+         (off 1)
+         (amt2 nil)
+         (siz #.(expt 2 10)) ;; 1kB buffer (1MB makes gc slow)
+         (vec (make-array siz
+                          :element-type '(unsigned-byte 8)
+                          :adjustable t
+                          :fill-pointer 0))
+         (code nil))
+    (cffi:with-foreign-object (bufp 'oci:ub-1 siz)
+      (flet ((move (n)
+               (dotimes (i (if csid (* 2 n) n)) ;; assume utf-16
+                 (vector-push-extend (cffi:mem-aref bufp 'oci:ub-1 i) vec))))
+        (cffi:with-foreign-object (amtp 'oci:ub-4)
+          (setf (cffi:mem-ref amtp 'oci:ub-4) 0)
+          (while2 (eql #.oci:+need-data+
+                       (setq code
+                             (oci:lob-read svchp errhp locator amtp off bufp siz
+                                           null null (or csid 0)
+                                           oci:+sqlcs-implicit+)))
+            (move (cffi:mem-ref amtp 'oci:ub-4))
+            (setf (cffi:mem-ref amtp 'oci:ub-4) 0)) ;; TODO needed?
+          (unless (eql #.oci:+need-data+ code)
+            (oci-call code))
+          (move (cffi:mem-ref amtp 'oci:ub-4)))))
+    vec))
+
+(defun download-blob (locator)
+  (coerce (download-lob locator) '(simple-array (unsigned-byte 8) (*))))
+
+(defun download-clob (locator)
+  (babel:octets-to-string (download-lob locator oci:+utf-16-id+) :encoding :utf-16le))
