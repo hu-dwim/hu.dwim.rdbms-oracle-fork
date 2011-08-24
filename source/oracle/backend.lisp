@@ -52,22 +52,20 @@
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
                             (command string)
-                            &key visitor binding-types binding-values result-type start-row row-limit
+                            &key visitor binding-types binding-values result-type
                             &allow-other-keys)
   (rdbms.debug "Executing ~S" command)
   (let ((statement (prepare-command database transaction command)))
     (unwind-protect
-         (execute-prepared-statement transaction statement binding-types binding-values visitor result-type
-                                     :start-row start-row :row-limit row-limit)
+         (execute-prepared-statement transaction statement binding-types binding-values visitor result-type)
       (free-prepared-statement statement))))
 
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
                             (prepared-statement prepared-statement)
-                            &key visitor binding-types binding-values result-type start-row row-limit
+                            &key visitor binding-types binding-values result-type
                             &allow-other-keys)
-  (execute-prepared-statement transaction prepared-statement binding-types binding-values visitor result-type
-                              :start-row start-row :row-limit row-limit))
+  (execute-prepared-statement transaction prepared-statement binding-types binding-values visitor result-type))
 
 (def method cleanup-transaction :after ((transaction oracle-transaction))
   (when (environment-handle-pointer transaction)
@@ -278,10 +276,8 @@
   (free-bindings (bindings-of statement))
   (cffi:foreign-free (statement-handle-pointer statement)))
 
-(def function execute-prepared-statement (transaction statement binding-types binding-values visitor result-type
-                                               &key (start-row 0) row-limit)
-  (setq start-row 0) ;; TODO THL why are start-row and row-limit here when it is handled by offset and limit in the sql query as oposed to fetching query results? probably old idea before handling that on the query side
-  (let ((needs-scrollable-cursor-p (and start-row (> start-row 0))))
+(defun execute-prepared-statement (transaction statement binding-types binding-values visitor result-type)
+  (progn ;; TODO THL remove progn, kept only to preserve indentation
     ;; make bindings
     (setf (bindings-of statement) (make-bindings statement transaction binding-types binding-values))
 

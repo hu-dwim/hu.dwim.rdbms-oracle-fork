@@ -95,7 +95,7 @@
           (setf result (nreverse result)))
         result)))
 
-(def function for-each-row (function cursor &key row-count start-position (result-type (default-result-type-of cursor)))
+(def function for-each-row (function cursor &key (result-type (default-result-type-of cursor)))
   (if (and start-position (> start-position 0))
       (setf (cursor-position cursor) start-position)
       (setf (cursor-position cursor) :first))
@@ -107,7 +107,7 @@
              (funcall function row)
              (setf (cursor-position cursor) :next))))
 
-(def function collect-rows (cursor &key row-count start-position (result-type (default-result-type-of cursor)))
+(def function collect-rows (cursor &key (result-type (default-result-type-of cursor)))
   (let ((result (ecase result-type
                   (list nil)
                   (vector (make-array 8 :adjustable #t :fill-pointer 0)))))
@@ -115,8 +115,6 @@
                     (list [push !1 result])
                     (vector [vector-push-extend !1 result]))
                   cursor
-                  :start-position start-position
-                  :row-count row-count
                   :result-type result-type)
     ;; TODO: optimize this
     (when (eq 'list result-type)
