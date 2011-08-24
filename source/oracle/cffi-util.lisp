@@ -158,6 +158,8 @@
                               mode)))
 
 (def function stmt-fetch-2 (statement number-of-rows orientation offset)
+  #+allegro
+  (assert (zerop offset))
   (let ((status
          #+allegro ;; TODO THL report error when offset used?
           (oci:stmt-fetch (statement-handle-of statement)
