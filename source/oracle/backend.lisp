@@ -305,6 +305,10 @@
     ;; make bindings
     (setf (bindings-of statement) (make-bindings statement transaction binding-types binding-values))
 
+    ;; TODO THL configurable prefetching limits?
+    (set-statement-attribute statement oci:+attr-prefetch-rows+ 1000000)
+    (set-statement-attribute statement oci:+attr-prefetch-memory+ #. (* 10 (expt 2 20)))
+    
     ;; execute
     (stmt-execute statement *default-oci-flags*)
 

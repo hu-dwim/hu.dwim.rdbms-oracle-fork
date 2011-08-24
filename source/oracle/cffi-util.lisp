@@ -64,6 +64,16 @@
                (error-handle-of *transaction*)))
     (dereference-foreign-pointer data-pointer ,type size-pointer)))
 
+(defmacro set-statement-attribute (statement attribute value &optional (type 'oci:ub-4))
+  `(cffi:with-foreign-object (data ',type)
+     (setf (cffi:mem-aref data ',type) ,value)
+     (oci-call (oci:attr-set (statement-handle-of ,statement)
+                             oci:+htype-stmt+
+                             data
+                             ,(cffi:foreign-type-size type)
+                             ,attribute
+                             (error-handle-of *transaction*)))))
+
 (def function select-p (prepared-statement)
   (= oci:+stmt-select+
      (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
