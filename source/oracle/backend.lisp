@@ -276,33 +276,66 @@
   (free-bindings (bindings-of statement))
   (cffi:foreign-free (statement-handle-pointer statement)))
 
+(defun decode-row (column-descriptors result-type)
+  (ecase result-type
+    (list
+     (loop
+        for d across column-descriptors
+        collect (fetch-column-value d 0)))
+    (vector
+     (loop
+        with vals = (make-array (length column-descriptors))
+        for d across column-descriptors
+        for i from 0
+        do (setf (aref vals i) (fetch-column-value d 0))
+        finally (return vals)))))
+
+(defun call-with-column-descriptors (statement transaction fn)
+  (let ((d (make-column-descriptors statement transaction)))
+    (unwind-protect (funcall fn d)
+      (loop
+         for x across d
+         do (free-column-descriptor transaction x)))))
+
+(defmacro with-column-descriptors ((var statement transaction) &body body)
+  `(call-with-column-descriptors ,statement ,transaction (lambda (,var) ,@body)))
+
 (defun execute-prepared-statement (transaction statement binding-types binding-values visitor result-type)
   (progn ;; TODO THL remove progn, kept only to preserve indentation
     ;; make bindings
     (setf (bindings-of statement) (make-bindings statement transaction binding-types binding-values))
 
     ;; execute
-    (stmt-execute statement
-                  (if needs-scrollable-cursor-p
-                      (logior *default-oci-flags* oci:+stmt-scrollable-readonly+)
-                      *default-oci-flags*))
+    (stmt-execute statement *default-oci-flags*)
 
     ;; fetch
     (cond
       ((select-p statement)
-       (let* ((cursor (make-cursor transaction
-                                   :statement statement
-                                   :result-type result-type
-                                   :random-access-p needs-scrollable-cursor-p)))
-         (unwind-protect
-              (if visitor
-                  (for-each-row visitor cursor
-                                :start-position start-row
-                                :row-count row-limit)
-                  (collect-rows cursor
-                                :start-position start-row
-                                :row-count row-limit))
-           (close-cursor cursor))))
+       (with-column-descriptors (d statement transaction)
+         (flet ((fetch ()
+                  (when (stmt-fetch-2 statement 1 oci:+fetch-next+ 0)
+                    (assert (eql 1 (get-statement-attribute
+                                    statement
+                                    oci:+attr-rows-fetched+
+                                    'oci:ub-4)))
+                    t))
+                (row ()
+                  (decode-row d result-type)))
+           (if visitor
+               (loop
+                  while (fetch)
+                  do (funcall visitor (row)))
+               (ecase result-type
+                 (list
+                  (loop
+                     while (fetch)
+                     collect (row)))
+                 (vector
+                  (loop
+                     with v = (make-array 8 :adjustable t :fill-pointer 0)
+                     while (fetch)
+                     do (vector-push-extend (row) v)
+                     finally (return v))))))))
       (t
        (when (and (or (insert-p statement)
                       (update-p statement))
