@@ -12,7 +12,7 @@
   (append (list (tab-page/widget (:selector (icon/widget switch-to-tab-page :label "User guide"))
                   (make-value-inspector (find-book 'user-guide)))
                 (tab-page/widget (:selector (icon/widget switch-to-tab-page :label "Dictionary"))
-                  (make-value-inspector (mapcar 'find-dictionary '(database transaction transaction-hook execute command cursor table column view sequence index)))))
+                  (make-value-inspector (mapcar 'find-dictionary '(database transaction transaction-hook execute command table column view sequence index)))))
           (call-next-method)))
 
 (def book user-guide (:title "User guide")
@@ -109,18 +109,6 @@ contain the type information necessary for this). this needs changes in hu.dwim.
   select-count-*
   select-records
   update-records)
-
-(def dictionary cursor ()
-  collect-rows
-  column-count
-  column-name
-  column-type
-  column-value
-  current-row
-  cursor-position
-  for-each-row
-  make-cursor
-  row-count)
 
 (def dictionary table ()
   create-table

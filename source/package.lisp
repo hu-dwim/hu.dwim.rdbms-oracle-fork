@@ -69,17 +69,6 @@
            #:release-safepoint
            #:rollback-to-safepoint
 
-           #:make-cursor
-           #:cursor-position
-           #:column-count
-           #:row-count
-           #:column-name
-           #:column-type
-           #:column-value
-           #:for-each-row
-           #:collect-rows
-           #:current-row
-
            #:sql-create-table
            #:sql-create-index
 	   #:sql-index-operation

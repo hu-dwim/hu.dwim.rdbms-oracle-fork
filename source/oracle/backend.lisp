@@ -426,9 +426,6 @@
     (unless (cffi:null-pointer-p data-pointer)
       (cffi:foreign-free data-pointer))))
 
-;;;;;;
-;;; Cursor
-
 (def constant +number-of-buffered-rows+ 1) ; TODO prefetching rows probably superfluous, because OCI does that
 
 (def class* column-descriptor ()
@@ -524,119 +521,6 @@
         (loop for i from 0 below +number-of-buffered-rows+
               do (funcall destructor (cffi:mem-ref buffer :pointer (* i size)))))
       (return-paraminfo paraminfo (database-of transaction)))))
-
-(def class* oracle-cursor (cursor)
-  ((statement)
-   (column-descriptors)
-   (current-position 0)
-   (buffer-start-position 0)
-   (buffer-end-position 0)))
-
-(def generic column-descriptor-of (cursor index)
-  (:method ((cursor oracle-cursor) index)
-           (svref (column-descriptors-of cursor) index)))
-
-(def class* oracle-sequential-access-cursor (oracle-cursor sequential-access-cursor)
-  ((end-seen #f :type boolean)))
-
-(def class* oracle-random-access-cursor (oracle-cursor random-access-cursor)
-  ((row-count nil)))
-
-;;;;;;
-;;; Cursor API
-
-(def method make-cursor ((transaction oracle-transaction)
-                        &key statement random-access-p &allow-other-keys)
-  (if random-access-p
-      (aprog1 (make-instance 'oracle-random-access-cursor
-                             :statement statement
-                             :column-descriptors (make-column-descriptors statement transaction))
-        (row-count it)  ; TODO This positions to the last row so the response
-                            ;      time can be high. Try to delay this computation
-        (rdbms.dribble "Count of rows: ~D" (row-count-of it)))
-      (make-instance 'oracle-sequential-access-cursor
-                     :statement statement
-                     :column-descriptors (make-column-descriptors statement transaction))))
-
-(def method close-cursor ((cursor oracle-cursor))
-  (loop for descriptor across (column-descriptors-of cursor)
-        do (free-column-descriptor (transaction-of cursor) descriptor)))
-
-(def method cursor-position ((cursor oracle-sequential-access-cursor))
-  (unless (end-seen-p cursor)
-    (current-position-of cursor)))
-
-(def method cursor-position ((cursor oracle-random-access-cursor))
-  (with-slots (current-position row-count) cursor
-    (when (and (<= 0 current-position) (< current-position row-count))
-      current-position)))
-
-(def method (setf cursor-position) (where (cursor oracle-sequential-access-cursor))
-  (ecase where
-    (:first (setf (current-position-of cursor) 0))
-    (:next (incf (current-position-of cursor))))
-  (ensure-current-position-is-buffered cursor)) ; TODO delay this call
-
-(def method (setf cursor-position) (where (cursor oracle-random-access-cursor))
-  (if (integerp where)
-      (incf (current-position-of cursor) where)
-      (ecase where
-        (:first (setf (current-position-of cursor) 0))
-        (:last (setf (current-position-of cursor) (1- (row-count cursor))))
-        (:previous (decf (current-position-of cursor)))
-        (:next (incf (current-position-of cursor))))))
-
-(def method absolute-cursor-position ((cursor oracle-cursor))
-  (current-position-of cursor)) ; FIXME always the same as (cursor-position cursor) ?
-
-(def method (setf absolute-cursor-position) (where (cursor oracle-random-access-cursor))
-  (setf (current-position-of cursor) where))
-
-(def method row-count ((cursor oracle-sequential-access-cursor))
-  (error "Row count not supported by ~S" cursor))
-
-(def method row-count ((cursor oracle-random-access-cursor))
-  (with-slots (row-count statement buffer-start-position buffer-end-position) cursor
-    (unless row-count
-      (if (stmt-fetch-last statement)
-          (setf row-count (get-row-count-attribute statement)
-                buffer-start-position (1- row-count)
-                buffer-end-position row-count)
-          (setf row-count 0)))
-    row-count))
-
-(def method column-count ((cursor oracle-cursor))
-  (length (column-descriptors-of cursor)))
-
-(def method column-name ((cursor oracle-cursor) index)
-  (name-of (column-descriptor-of cursor index)))
-
-(def method column-type ((cursor oracle-cursor) index)
-  nil) ; TODO
-
-(def method column-value ((cursor oracle-cursor) index)
-  (when (ensure-current-position-is-buffered cursor)
-    (fetch-column-value (column-descriptor-of cursor index)
-                        (- (current-position-of cursor)
-                           (buffer-start-position-of cursor)))))
-
-#|
-(def function current-row (cursor &key result-type)
-  (when (ensure-current-position-is-buffered cursor)
-    (with-slots (column-descriptors current-position buffer-start-position default-result-type) cursor
-      (let ((row-index (- current-position buffer-start-position)))
-        (ecase (or result-type default-result-type)
-          (vector (aprog1 (make-array (length column-descriptors))
-                    (loop for descriptor across column-descriptors
-                          for column-index from 0
-                          do (setf (svref it column-index)
-                                   (fetch-column-value descriptor row-index)))))
-          (list (loop for descriptor across column-descriptors
-                      collect (fetch-column-value descriptor row-index))))))))
-|#
-
-;;;;;;
-;;; Cursor helpers
 
 (def function make-column-descriptors (statement transaction)
   (coerce (cffi:with-foreign-objects ((param-descriptor-pointer :pointer))
@@ -770,45 +654,6 @@
 		     :return-codes return-codes
 		     :indicators indicators
 		     :paraminfo paraminfo))))
-
-(def generic ensure-current-position-is-buffered (cursor)
-  (:method ((cursor oracle-sequential-access-cursor))
-           (with-slots (statement current-position
-                                  buffer-start-position buffer-end-position end-seen) cursor
-             (cond
-               ((< current-position buffer-start-position)
-                (if (zerop current-position)
-                    nil                 ; TODO reexecute statement
-                    (error "Trying to go backwards with a sequential cursor: ~S" cursor)))
-               (t
-                (loop until (or (> buffer-end-position current-position)
-                                end-seen)
-                  do (if (stmt-fetch-next statement +number-of-buffered-rows+)
-                         (setf buffer-start-position buffer-end-position
-                               buffer-end-position (get-row-count-attribute statement))
-                         (setf end-seen #t))
-                  finally (return-from ensure-current-position-is-buffered (not end-seen)))))))
-
-  (:method ((cursor oracle-random-access-cursor))
-           (with-slots (statement current-position buffer-start-position buffer-end-position
-                                  row-count) cursor
-             (cond
-               ((or (< current-position 0)
-                    (>= current-position row-count))
-                #f)
-               ((>= current-position buffer-end-position) ; forward
-                (stmt-fetch-2 statement +number-of-buffered-rows+
-                              oci:+fetch-absolute+ (1+ current-position)) ; OCI 1-based indexing
-                (setf buffer-start-position current-position
-                      buffer-end-position (min (+ current-position +number-of-buffered-rows+)
-                                               row-count)))
-               ((< current-position buffer-start-position) ; backward
-                (stmt-fetch-2 statement +number-of-buffered-rows+ oci:+fetch-absolute+
-                              (1+ (max (- (1+ current-position) +number-of-buffered-rows+) 0))) ; 1-based
-                (setf buffer-start-position (max (- (1+ current-position) +number-of-buffered-rows+) 0)
-                      buffer-end-position (1+ current-position)))
-               (t
-                #t)))))
 
 (def function fetch-column-value (column-descriptor row-index)
   (rdbms.debug "Fetching ~S from buffer at index ~D" (name-of column-descriptor) row-index)

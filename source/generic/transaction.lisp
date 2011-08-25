@@ -23,7 +23,7 @@
   ((database
     :type database)
    (default-result-type
-    :type (member vector list cursor))
+    :type (member vector list))
    (timestamp
     nil
     :type integer)
