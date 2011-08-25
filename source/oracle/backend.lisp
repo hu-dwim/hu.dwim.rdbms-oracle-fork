@@ -362,39 +362,41 @@
     ;; TODO THL configurable prefetching limits?
     (set-statement-attribute statement oci:+attr-prefetch-rows+ 1000000)
     (set-statement-attribute statement oci:+attr-prefetch-memory+ #. (* 10 (expt 2 20)))
-
     ;; execute
     (with-bindings (statement transaction binding-types binding-values)
       (stmt-execute statement *default-oci-flags*))
-
     ;; fetch
     (cond
       ((select-p statement)
        (with-column-descriptors (d statement transaction)
-         (flet ((fetch ()
-                  (when (stmt-fetch-2 statement 1 oci:+fetch-next+ 0)
+         (loop
+            with z = nil
+            with xvisitor = (or visitor
+                                ;; TODO THL remove result-type and leave visitor only
+                                (ecase result-type
+                                  (list ;; list row visitor
+                                   (let ((x (cons nil nil)))
+                                     (setf (car x) x)
+                                     (lambda (row)
+                                       (let ((y (cons row nil)))
+                                         (setf (cdar x) y
+                                               (car x) y))
+                                       (cdr x))))
+                                  (vector ;; vector row visitor
+                                   (let ((x (make-array 8
+                                                        :adjustable t
+                                                        :fill-pointer 0)))
+                                     (lambda (row)
+                                       (vector-push-extend row x)
+                                       x)))))
+            while (when (stmt-fetch-2 statement 1 oci:+fetch-next+ 0)
                     (assert (eql 1 (get-statement-attribute
                                     statement
                                     oci:+attr-rows-fetched+
                                     'oci:ub-4)))
-                    t))
-                (row ()
-                  (decode-row d result-type)))
-           (if visitor
-               (loop
-                  while (fetch)
-                  do (funcall visitor (row)))
-               (ecase result-type
-                 (list
-                  (loop
-                     while (fetch)
-                     collect (row)))
-                 (vector
-                  (loop
-                     with v = (make-array 8 :adjustable t :fill-pointer 0)
-                     while (fetch)
-                     do (vector-push-extend (row) v)
-                     finally (return v))))))))
+                    t)
+            do (setq z (funcall xvisitor (decode-row d result-type)))
+            finally (return z))))
       (t
        (values nil (get-row-count-attribute statement)))))) ;; TODO THL what should the first value be?
 
