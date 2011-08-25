@@ -280,7 +280,7 @@
      (setf (cffi:mem-ref ,var ,type) ,value)
      ,@body))
 
-(defun call-with-binding (stm tx pos btype bval fn)
+(defun call-with-binder (stm tx pos btype bval fn)
   (let ((is-null (or (eql bval :null)
                      (and (not bval) (not (typep btype 'sql-boolean-type))))))
     (with-initialized-foreign-object (&indicator 'oci:sb-2 (if is-null -1 0))
@@ -317,21 +317,21 @@
               ;; TODO THL free locator inside too if lob-type-p?
               (cffi:foreign-free &data))))))))
 
-(defmacro with-binding ((stm tx pos btype bval) &body body)
-  `(call-with-binding ,stm ,tx ,pos ,btype ,bval (lambda () ,@body)))
+(defmacro with-binder ((stm tx pos btype bval) &body body)
+  `(call-with-binder ,stm ,tx ,pos ,btype ,bval (lambda () ,@body)))
 
-(defun call-with-bindings (stm tx btypes bvals fn)
+(defun call-with-binders (stm tx btypes bvals fn)
   (let ((n (length btypes)))
     (assert (eql n (length bvals)))
     (labels ((rec (i)
                (if (< i n)
-                   (with-binding (stm tx (1+ i) (aref btypes i) (aref bvals i))
+                   (with-binder (stm tx (1+ i) (aref btypes i) (aref bvals i))
                      (rec (1+ i)))
                    (funcall fn))))
       (rec 0))))
 
-(defmacro with-bindings ((stm tx btypes bvals) &body body)
-  `(call-with-bindings ,stm ,tx ,btypes ,bvals (lambda () ,@body)))
+(defmacro with-binders ((stm tx btypes bvals) &body body)
+  `(call-with-binders ,stm ,tx ,btypes ,bvals (lambda () ,@body)))
 
 (defun decode-row (column-descriptors result-type)
   (ecase result-type
@@ -363,7 +363,7 @@
     (set-statement-attribute statement oci:+attr-prefetch-rows+ 1000000)
     (set-statement-attribute statement oci:+attr-prefetch-memory+ #. (* 10 (expt 2 20)))
     ;; execute
-    (with-bindings (statement transaction binding-types binding-values)
+    (with-binders (statement transaction binding-types binding-values)
       (stmt-execute statement *default-oci-flags*))
     ;; fetch
     (cond
