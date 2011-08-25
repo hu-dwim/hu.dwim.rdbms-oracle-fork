@@ -273,8 +273,65 @@
 
 (def function free-prepared-statement (statement)
   (oci-call (oci:handle-free (statement-handle-of statement) oci:+htype-stmt+))
-  (free-bindings (bindings-of statement))
   (cffi:foreign-free (statement-handle-pointer statement)))
+
+(defmacro with-initialized-foreign-object ((var type value) &body body)
+  `(cffi:with-foreign-object (,var ,type)
+     (setf (cffi:mem-ref ,var ,type) ,value)
+     ,@body))
+
+(defun call-with-binding (stm tx pos btype bval fn)
+  (let ((is-null (or (eql bval :null)
+                     (and (not bval) (not (typep btype 'sql-boolean-type))))))
+    (with-initialized-foreign-object (&indicator 'oci:sb-2 (if is-null -1 0))
+      (let ((typemap (typemap-for-sql-type btype)))
+        (multiple-value-bind (&data size)
+            (if is-null
+                (if (lob-type-p btype)
+                    (make-lob-locator t) ;; TODO THL why needed when indicator is -1?
+                    (values null 0))
+                (funcall (typemap-lisp-to-oci typemap) bval))
+          ;; TODO THL why &&locator and not &locator? stmt-execute crashes:-{
+          (when (lob-type-p btype)
+            (setq &data (foreign-alloc-with-initial-element :pointer :initial-element &data)))
+          (unwind-protect
+               (cffi:with-foreign-object (&&bind-handle :pointer)
+                 (oci-call (oci:bind-by-pos (statement-handle-of stm)
+                                            &&bind-handle
+                                            (error-handle-of tx)
+                                            pos
+                                            &data
+                                            size
+                                            (typemap-external-type typemap)
+                                            &indicator
+                                            null ; alenp
+                                            null ; rcodep
+                                            0    ; maxarr_len
+                                            null ; curelep
+                                            *default-oci-flags*))
+                 (funcall fn)
+                 (when (and (lob-type-p btype)
+                            (not (member bval '(:null nil #()) :test #'equalp)))
+                   (upload-lob (cffi:mem-aref &data :pointer) bval)))
+            (unless (cffi:null-pointer-p &data)
+              ;; TODO THL free locator inside too if lob-type-p?
+              (cffi:foreign-free &data))))))))
+
+(defmacro with-binding ((stm tx pos btype bval) &body body)
+  `(call-with-binding ,stm ,tx ,pos ,btype ,bval (lambda () ,@body)))
+
+(defun call-with-bindings (stm tx btypes bvals fn)
+  (let ((n (length btypes)))
+    (assert (eql n (length bvals)))
+    (labels ((rec (i)
+               (if (< i n)
+                   (with-binding (stm tx (1+ i) (aref btypes i) (aref bvals i))
+                     (rec (1+ i)))
+                   (funcall fn))))
+      (rec 0))))
+
+(defmacro with-bindings ((stm tx btypes bvals) &body body)
+  `(call-with-bindings ,stm ,tx ,btypes ,bvals (lambda () ,@body)))
 
 (defun decode-row (column-descriptors result-type)
   (ecase result-type
@@ -302,15 +359,13 @@
 
 (defun execute-prepared-statement (transaction statement binding-types binding-values visitor result-type)
   (progn ;; TODO THL remove progn, kept only to preserve indentation
-    ;; make bindings
-    (setf (bindings-of statement) (make-bindings statement transaction binding-types binding-values))
-
     ;; TODO THL configurable prefetching limits?
     (set-statement-attribute statement oci:+attr-prefetch-rows+ 1000000)
     (set-statement-attribute statement oci:+attr-prefetch-memory+ #. (* 10 (expt 2 20)))
-    
+
     ;; execute
-    (stmt-execute statement *default-oci-flags*)
+    (with-bindings (statement transaction binding-types binding-values)
+      (stmt-execute statement *default-oci-flags*))
 
     ;; fetch
     (cond
@@ -341,90 +396,7 @@
                      do (vector-push-extend (row) v)
                      finally (return v))))))))
       (t
-       (when (and (or (insert-p statement)
-                      (update-p statement))
-                  binding-types
-                  binding-values)
-         (loop
-            for type across binding-types
-            for value across binding-values
-            for binding in (bindings-of statement)
-            when (and (lob-type-p type)
-                      (not (member value '(:null nil #()) :test #'equalp)))
-            do (upload-lob (cffi:mem-aref (data-pointer-of binding) :pointer) value)))
        (values nil (get-row-count-attribute statement)))))) ;; TODO THL what should the first value be?
-
-;;;;;;
-;;; Binding
-
-(def class* oracle-binding ()
-  ((bind-handle-pointer)
-   (sql-type)
-   (typemap)
-   (data-pointer)
-   (data-size)
-   (indicator)))
-
-(def function make-bindings (statement transaction binding-types binding-values)
-  (iter (for type :in-vector binding-types)
-        (for value :in-vector binding-values)
-        (for position :from 1)
-        (collect (make-binding statement transaction position type value))))
-
-(def function make-binding (statement transaction position sql-type value)
-  (let* ((statement-handle (statement-handle-of statement))
-         (error-handle (error-handle-of transaction))
-         (typemap (typemap-for-sql-type sql-type))
-         (oci-type-code (typemap-external-type typemap))
-         (converter (typemap-lisp-to-oci typemap))
-         (bind-handle-pointer (foreign-alloc-with-initial-element :pointer :initial-element null))
-         (is-null (or (eql value :null)
-                      (and (cl:null value) (not (typep sql-type 'sql-boolean-type)))))
-         (indicator (foreign-alloc-with-initial-element 'oci:sb-2 :initial-element (if is-null -1 0))))
-    (multiple-value-bind (data-pointer data-size)
-        (if is-null
-            (if (or (typep sql-type 'sql-character-large-object-type)
-                    (typep sql-type 'sql-binary-large-object-type))
-                (make-lob-locator t) ;; TODO THL why needed when indicator is -1?
-                (values null 0))
-            (funcall converter value))
-
-      (rdbms.dribble "Value ~S converted to ~A" value (dump-c-byte-array data-pointer data-size))
-
-      ;; TODO THL why **locator and not *locator? stmt-execute crashes:-{
-      (when (lob-type-p sql-type)
-        (setq data-pointer (foreign-alloc-with-initial-element :pointer :initial-element data-pointer)))
-      
-      (oci-call (oci:bind-by-pos statement-handle
-                                 bind-handle-pointer
-                                 error-handle
-                                 position
-                                 data-pointer
-                                 data-size
-                                 oci-type-code
-                                 indicator
-                                 null               ; alenp
-                                 null               ; rcodep
-                                 0                  ; maxarr_len
-                                 null               ; curelep
-                                 *default-oci-flags*))
-      (make-instance 'oracle-binding
-                     :bind-handle-pointer bind-handle-pointer
-                     :sql-type sql-type
-                     :typemap typemap
-                     :data-pointer data-pointer
-                     :data-size data-size
-                     :indicator indicator))))
-
-(def function free-bindings (bindings)
-  (mapc 'free-binding bindings))
-
-(def function free-binding (binding)
-  (cffi:foreign-free (bind-handle-pointer-of binding))
-  (cffi:foreign-free (indicator-of binding))
-  (let ((data-pointer (data-pointer-of binding)))
-    (unless (cffi:null-pointer-p data-pointer)
-      (cffi:foreign-free data-pointer))))
 
 (def constant +number-of-buffered-rows+ 1) ; TODO prefetching rows probably superfluous, because OCI does that
 
