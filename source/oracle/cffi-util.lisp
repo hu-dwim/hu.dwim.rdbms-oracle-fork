@@ -64,16 +64,6 @@
                (error-handle-of *transaction*)))
     (dereference-foreign-pointer data-pointer ,type size-pointer)))
 
-(defmacro set-statement-attribute (statement attribute value &optional (type 'oci:ub-4))
-  `(cffi:with-foreign-object (data ',type)
-     (setf (cffi:mem-aref data ',type) ,value)
-     (oci-call (oci:attr-set (statement-handle-of ,statement)
-                             oci:+htype-stmt+
-                             data
-                             ,(cffi:foreign-type-size type)
-                             ,attribute
-                             (error-handle-of *transaction*)))))
-
 (def function select-p (prepared-statement)
   (= oci:+stmt-select+
      (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
@@ -128,14 +118,45 @@
 (def function oci-char-width ()
   (cffi::null-terminator-len (connection-encoding-of (database-of *transaction*)))) ;; FIXME using internal fn
 
-(def function set-session-string-attribute (attribute value)
+
+(defmacro set-attribute (handle handle-type attribute value &optional (type 'oci:ub-4))
+  `(cffi:with-foreign-object (data ',type)
+     (setf (cffi:mem-aref data ',type) ,value)
+     (oci-call (oci:attr-set ,handle
+                             ,handle-type
+                             data
+                             ,(cffi:foreign-type-size type)
+                             ,attribute
+                             (error-handle-of *transaction*)))))
+
+(defun set-string-attribute (handle handle-type attribute value)
   (with-foreign-oci-string (value c-string c-size)
-    (oci-call (oci:attr-set (session-handle-of *transaction*)
-                            oci:+htype-session+
+    (oci-call (oci:attr-set handle
+                            handle-type
                             c-string
                             c-size
                             attribute
                             (error-handle-of *transaction*)))))
+
+(defmacro set-statement-attribute (statement attribute value &optional (type 'oci:ub-4))
+  `(set-attribute (statement-handle-of ,statement)
+                  oci:+htype-stmt+
+                  ,attribute
+                  ,value
+                  ,type))
+
+(defun set-session-string-attribute (attribute value)
+  (set-string-attribute (session-handle-of *transaction*)
+                        oci:+htype-session+
+                        attribute
+                        value))
+
+(defmacro set-session-attribute (attribute value &optional (type 'oci:ub-4))
+  `(set-attribute (session-handle-of *transaction*)
+                  oci:+htype-session+
+                  ,attribute
+                  ,value
+                  ,type))
 
 (def function server-attach (datasource &optional (mode oci:+default+ ))
   (with-foreign-oci-string (datasource c-datasource c-size)
