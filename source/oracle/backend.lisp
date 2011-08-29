@@ -6,6 +6,10 @@
 
 (in-package :hu.dwim.rdbms.oracle)
 
+(defconstant OCI_ATTR_DEFAULT_LOBPREFETCH_SIZE 438)
+(defconstant OCI_ATTR_LOBPREFETCH_SIZE 439)
+(defconstant OCI_ATTR_LOBPREFETCH_LENGTH 440)
+
 (cffi:define-foreign-library oracle-oci
   (:windows (:or "ocixe.dll" "oci.dll"))
   (t (:default #-x86-64 "libocixe" #+x86-64 "libclntsh"))) ;; TODO THL dont use libocixe?
