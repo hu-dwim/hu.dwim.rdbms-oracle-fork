@@ -328,11 +328,10 @@
 (defmacro while2 (test &body body) ;; WHILE would clash with ITERATE:-{
   `(loop while ,test do (progn ,@body)))
 
-(defun download-lob (locator &optional csid)
+(defun download-lob-without-prefetching (locator &optional csid)
   (let* ((svchp (service-context-handle-of *transaction*))
          (errhp (error-handle-of *transaction*))
          (off 1)
-         (amt2 nil)
          (siz #.(expt 2 10)) ;; 1kB buffer (1MB makes gc slow)
          (vec (make-array siz
                           :element-type '(unsigned-byte 8)
@@ -351,11 +350,52 @@
                                            null null (or csid 0)
                                            oci:+sqlcs-implicit+)))
             (move (cffi:mem-ref amtp 'oci:ub-4))
-            (setf (cffi:mem-ref amtp 'oci:ub-4) 0)) ;; TODO needed?
+            (setf (cffi:mem-ref amtp 'oci:ub-4) 0))
           (unless (eql #.oci:+need-data+ code)
             (oci-call code))
           (move (cffi:mem-ref amtp 'oci:ub-4)))))
     vec))
+
+#-allegro
+(defun download-lob-with-prefetching (locator &optional csid)
+  (let* ((svchp (service-context-handle-of *transaction*))
+         (errhp (error-handle-of *transaction*))
+         (off 1)
+         (siz #.(expt 2 10)) ;; 1kB buffer (1MB makes gc slow)
+         (vec (make-array siz
+                          :element-type '(unsigned-byte 8)
+                          :adjustable t
+                          :fill-pointer 0))
+         (code nil))
+    (cffi:with-foreign-object (bufp 'oci:ub-1 siz)
+      (flet ((move (n)
+               (dotimes (i n)
+                 (vector-push-extend (cffi:mem-aref bufp 'oci:ub-1 i) vec))))
+        (cffi:with-foreign-object (bamtp 'oci:oraub-8)
+          (cffi:with-foreign-object (camtp 'oci:oraub-8)
+            (setf (cffi:mem-ref bamtp 'oci:oraub-8) 0
+                  (cffi:mem-ref camtp 'oci:oraub-8) 0)
+            (loop
+               for piece = oci:+first-piece+ then oci:+next-piece+
+               while (eql #.oci:+need-data+
+                          (setq code
+                                (oci:lob-read-2 svchp errhp locator bamtp camtp
+                                                off bufp siz
+                                                piece
+                                                null null (or csid 0)
+                                                oci:+sqlcs-implicit+)))
+               do (progn
+                    (move (cffi:mem-ref bamtp 'oci:oraub-8))
+                    (setf (cffi:mem-ref bamtp 'oci:oraub-8) 0
+                          (cffi:mem-ref camtp 'oci:oraub-8) 0)))
+            (unless (eql #.oci:+need-data+ code)
+              (oci-call code))
+            (move (cffi:mem-ref bamtp 'oci:oraub-8))))))
+    vec))
+
+(defun download-lob (locator &optional csid)
+  #-allegro (download-lob-with-prefetching locator csid)
+  #+allegro (download-lob-without-prefetching locator csid))
 
 (defun download-blob (locator)
   (coerce (download-lob locator) '(simple-array (unsigned-byte 8) (*))))
