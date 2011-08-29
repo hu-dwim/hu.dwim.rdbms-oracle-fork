@@ -154,6 +154,9 @@
 
 (defvar *use-connection-pool* t)
 
+(defun set-default-lob-prefetching (value)
+  (set-session-attribute OCI_ATTR_DEFAULT_LOBPREFETCH_SIZE value))
+
 (def function connect (transaction)
   (assert (cl:null (environment-handle-pointer transaction)))
   (ensure-oracle-oci-is-loaded)
@@ -398,6 +401,14 @@
 (defmacro with-defin3r-buffer ((ptr nbytes nrows nbytes1 typemap) &body body)
   `(call-with-defin3r-buffer ,nrows ,nbytes1 ,typemap
                              (lambda (,ptr ,nbytes) ,@body)))
+
+(defun set-lob-prefetching (defin3r-handle size length)
+  (when size
+    (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_SIZE
+                   size))
+  (when length
+    (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_LENGTH
+                   length)))
 
 (defun call-with-defin3r (stm tx pos1 paraminfo fn &aux (nrows 1)) ;; TODO nrows
   (multiple-value-bind (ctype csize precision scale)
