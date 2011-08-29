@@ -450,6 +450,12 @@
 (defmacro with-defin3rs ((var stm tx) &body body)
   `(call-with-defin3rs ,stm ,tx (lambda (,var) ,@body)))
 
+(defun set-row-prefetching (stm rows-limit memory-limit)
+  (when rows-limit
+    (set-statement-attribute stm oci:+attr-prefetch-rows+ rows-limit))
+  (when memory-limit
+    (set-statement-attribute stm oci:+attr-prefetch-memory+ memory-limit)))
+
 (defun make-list-row-visitor ()
   (let ((x (cons nil nil)))
     (setf (car x) x)
@@ -472,6 +478,8 @@
         (vector (make-vector-row-visitor)))))
 
 (defun execute-prepared-statement (transaction statement binding-types binding-values visitor result-type)
+  ;; TODO THL configurable prefetching limits?
+  (set-row-prefetching statement 1000000 #.(* 10 (expt 2 20)))
   ;; execute
   (with-binders (statement transaction binding-types binding-values)
     (stmt-execute statement *default-oci-flags*))
