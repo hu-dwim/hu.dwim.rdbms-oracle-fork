@@ -494,10 +494,10 @@
   ;; execute
   (with-binders (statement transaction binding-types binding-values)
     (stmt-execute statement *default-oci-flags*))
-  ;; fetch
-  (cond
-    ((select-p statement)
-     (with-defin3rs (d statement transaction)
+  (values
+   ;; fetch  
+   (with-defin3rs (d statement transaction)
+     (when (plusp (length d))
        (loop
           with z = nil
           with xvisitor = (make-row-visitor visitor result-type)
@@ -508,9 +508,8 @@
                                   'oci:ub-4)))
                   t)
           do (setq z (funcall xvisitor (decode-row d result-type)))
-          finally (return (values z (get-row-count-attribute statement))))))
-    (t
-     (values nil (get-row-count-attribute statement))))) ;; TODO THL what should the first value be?
+          finally (return z))))
+   (get-row-count-attribute statement)))
 
 (defun parse-paraminfo (paraminfo)
   (cffi:with-foreign-objects ((attribute-value :uint8 8)
