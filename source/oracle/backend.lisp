@@ -402,6 +402,38 @@
   `(call-with-defin3r-buffer ,nrows ,nbytes1 ,typemap
                              (lambda (,ptr ,nbytes) ,@body)))
 
+(defun parse-paraminfo (paraminfo)
+  (cffi:with-foreign-objects ((attribute-value :uint8 8)
+                              (attribute-value-length 'oci:ub-4))
+    (macrolet
+	;; use a macro so that the compiler macro on mem-ref can see the
+	;; cffi-type!  essential for speed.
+	((%oci-attr-get (attribute-id cffi-type)
+	   `(progn
+	      (oci-attr-get paraminfo ,attribute-id attribute-value attribute-value-length)
+	      (cffi:mem-ref attribute-value ,cffi-type)))
+	 (oci-string-attr-get (attribute-id)
+	   `(progn
+	      (oci-attr-get paraminfo ,attribute-id attribute-value attribute-value-length)
+	      (oci-string-to-lisp
+	       (cffi:mem-ref attribute-value :pointer) ; OraText*
+	       (cffi:mem-ref attribute-value-length 'oci:ub-4)))))
+      (let ((column-type (%oci-attr-get oci:+attr-data-type+ 'oci:ub-2))
+	    (column-size)
+	    (precision)
+	    (scale))
+	(declare (fixnum column-type))
+	(progn
+	  ;; KLUDGE oci:+attr-data-size+ returned as ub-2, despite it is documented as ub-4
+	  (setf (cffi:mem-ref attribute-value :unsigned-short) 0)
+	  (setf column-size (%oci-attr-get oci:+attr-data-size+ 'oci:ub-2)))
+	(when (= column-type oci:+sqlt-num+)
+	  ;; the type of the precision attribute is 'oci:sb-2, because we
+	  ;; use an implicit describe here (would be sb-1 for explicit describe)
+	  (setf precision (%oci-attr-get oci:+attr-precision+ 'oci:sb-2)
+		scale (%oci-attr-get oci:+attr-scale+ 'oci:sb-1)))
+	(values column-type column-size precision scale)))))
+
 (defun set-lob-prefetching (defin3r-handle size length)
   (when size
     (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_SIZE
@@ -510,38 +542,6 @@
           do (setq z (funcall xvisitor (decode-row d result-type)))
           finally (return z))))
    (get-row-count-attribute statement)))
-
-(defun parse-paraminfo (paraminfo)
-  (cffi:with-foreign-objects ((attribute-value :uint8 8)
-                              (attribute-value-length 'oci:ub-4))
-    (macrolet
-	;; use a macro so that the compiler macro on mem-ref can see the
-	;; cffi-type!  essential for speed.
-	((%oci-attr-get (attribute-id cffi-type)
-	   `(progn
-	      (oci-attr-get paraminfo ,attribute-id attribute-value attribute-value-length)
-	      (cffi:mem-ref attribute-value ,cffi-type)))
-	 (oci-string-attr-get (attribute-id)
-	   `(progn
-	      (oci-attr-get paraminfo ,attribute-id attribute-value attribute-value-length)
-	      (oci-string-to-lisp
-	       (cffi:mem-ref attribute-value :pointer) ; OraText*
-	       (cffi:mem-ref attribute-value-length 'oci:ub-4)))))
-      (let ((column-type (%oci-attr-get oci:+attr-data-type+ 'oci:ub-2))
-	    (column-size)
-	    (precision)
-	    (scale))
-	(declare (fixnum column-type))
-	(progn
-	  ;; KLUDGE oci:+attr-data-size+ returned as ub-2, despite it is documented as ub-4
-	  (setf (cffi:mem-ref attribute-value :unsigned-short) 0)
-	  (setf column-size (%oci-attr-get oci:+attr-data-size+ 'oci:ub-2)))
-	(when (= column-type oci:+sqlt-num+)
-	  ;; the type of the precision attribute is 'oci:sb-2, because we
-	  ;; use an implicit describe here (would be sb-1 for explicit describe)
-	  (setf precision (%oci-attr-get oci:+attr-precision+ 'oci:sb-2)
-		scale (%oci-attr-get oci:+attr-scale+ 'oci:sb-1)))
-	(values column-type column-size precision scale)))))
 
 (def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?
 
