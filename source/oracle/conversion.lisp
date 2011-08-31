@@ -157,8 +157,8 @@
   (oci-string-to-lisp ptr))
 
 (def function string-to-clob (str)
-  (assert (and (stringp str) (not (equal "" str))))
-  (make-lob-locator))
+  (assert (stringp str))
+  (make-lob-locator-indirect t))
 
 (def function string-from-clob (ptr len)
   (assert (= #.(cffi:foreign-type-size :pointer) len))
@@ -168,8 +168,8 @@
 ;;; Binary data conversions
 
 (def function byte-array-to-blob (ba)
-  (assert (and (typep ba 'vector) (not (equalp #() ba)))) ; '(vector (unsigned-byte 8))
-  (make-lob-locator))
+  (assert (typep ba 'vector)) ;; '(vector (unsigned-byte 8))
+  (make-lob-locator-indirect t))
 
 (def function byte-array-from-blob (ptr len)
   (assert (= #.(cffi:foreign-type-size :pointer) len))

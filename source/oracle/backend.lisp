@@ -282,64 +282,70 @@
   (oci-call (oci:handle-free (statement-handle-of statement) oci:+htype-stmt+))
   (cffi:foreign-free (statement-handle-pointer statement)))
 
+(defun alloc-indicator (is-null)
+  (foreign-alloc-with-initial-element 'oci:sb-2 (if is-null -1 0)))
+
+(defun is-null-p (bval btype)
+  (or (eql bval :null)
+      (and (cl:null bval)
+           (not (typep btype 'sql-boolean-type)))))
+
+(defun convert-value (bval btype converter)
+  (cond
+    ((lob-type-p btype) ;; TODO THL need this case?
+     (multiple-value-bind (ptr len) (make-lob-locator-indirect)
+       (values ptr len (alloc-indicator t))))
+    ((is-null-p bval btype)
+     (values null 0 (alloc-indicator t)))
+    (t
+     (multiple-value-bind (ptr len) (funcall converter bval)
+       (values ptr len (alloc-indicator nil))))))
+
 (defmacro with-initialized-foreign-object ((var type value) &body body)
   `(cffi:with-foreign-object (,var ,type)
      (setf (cffi:mem-ref ,var ,type) ,value)
      ,@body))
 
-(defun call-with-binder-buffer (is-null bval btype typemap fn)
+(defun call-with-binder-buffer (bval btype typemap fn)
   ;; TODO THL use typemap constructor and destructor?
   ;; TODO THL use cffi:with- for ptr?
-  (multiple-value-bind (ptr size)
-      (if is-null
-          (if (lob-type-p btype)
-              (make-lob-locator t) ;; TODO THL why needed when indicator is -1?
-              (values null 0))
-          (funcall (typemap-lisp-to-oci typemap) bval))
-    (cond
-      ((cffi-sys:null-pointer-p ptr)
-       (funcall fn ptr size))
-      ((lob-type-p btype)
-       ;; TODO THL why &&locator and not &locator? stmt-execute crashes:-{
-       (with-initialized-foreign-object (ptr2 :pointer ptr)
-         (unwind-protect (funcall fn ptr2 (cffi:foreign-type-size :pointer))
-           ;; TODO THL why freeing the locator crashes, double free?
-           #+nil(cffi:foreign-free ptr))))
-      (t
-       (unwind-protect (funcall fn ptr size)
-         (cffi:foreign-free ptr))))))
+  (multiple-value-bind (ptr len ind)
+      (convert-value bval btype (typemap-lisp-to-oci typemap))
+    (unwind-protect (funcall fn ptr len ind)
+      #+nil ;; TODO THL why freeing the locator crashes, double free?
+      (when (lob-type-p btype)
+        (cffi:foreign-free (cffi:mem-ref ptr :pointer)))
+      (cffi:foreign-free ptr)
+      (cffi:foreign-free ind))))
 
-(defmacro with-binder-buffer ((ptr nbytes is-null bval btype typemap) &body body)
-  `(call-with-binder-buffer ,is-null ,bval ,btype ,typemap
-                            (lambda (,ptr ,nbytes) ,@body)))
+(defmacro with-binder-buffer ((ptr len ind bval btype typemap) &body body)
+  `(call-with-binder-buffer ,bval ,btype ,typemap
+                            (lambda (,ptr ,len ,ind) ,@body)))
 
 (defun null-or-empty-value-p (x)
   (member x '(:null nil #()) :test #'equalp))
 
 (defun call-with-binder (stm tx pos1 btype bval fn)
-  (let ((is-null (or (eql bval :null)
-                     (and (not bval) (not (typep btype 'sql-boolean-type))))))
-    (with-initialized-foreign-object (indicator 'oci:sb-2 (if is-null -1 0))
-      (let ((typemap (typemap-for-sql-type btype)))
-        (with-binder-buffer (ptr nbytes is-null bval btype typemap)
-          (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
-            (oci-call (oci:bind-by-pos (statement-handle-of stm)
-                                       handle
-                                       (error-handle-of tx)
-                                       pos1
-                                       ptr
-                                       nbytes
-                                       (typemap-external-type typemap)
-                                       indicator
-                                       null ; alenp
-                                       null ; rcodep
-                                       0    ; maxarr_len
-                                       null ; curelep
-                                       *default-oci-flags*))
-            (prog1 (funcall fn)
-              (when (and (lob-type-p btype)
-                         (not (null-or-empty-value-p bval)))
-                (upload-lob (cffi:mem-aref ptr :pointer) bval)))))))))
+  (let ((typemap (typemap-for-sql-type btype)))
+    (with-binder-buffer (ptr len ind bval btype typemap)
+      (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
+        (oci-call (oci:bind-by-pos (statement-handle-of stm)
+                                   handle
+                                   (error-handle-of tx)
+                                   pos1
+                                   ptr
+                                   len
+                                   (typemap-external-type typemap)
+                                   ind
+                                   null ; alenp
+                                   null ; rcodep
+                                   0    ; maxarr_len
+                                   null ; curelep
+                                   *default-oci-flags*))
+        (prog1 (funcall fn)
+          (when (and (lob-type-p btype)
+                     (not (null-or-empty-value-p bval)))
+            (upload-lob (cffi:mem-aref ptr :pointer) bval)))))))
 
 (defmacro with-binder ((stm tx pos1 btype bval) &body body)
   `(call-with-binder ,stm ,tx ,pos1 ,btype ,bval (lambda () ,@body)))

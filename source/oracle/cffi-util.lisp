@@ -276,6 +276,11 @@
         (set-empty-lob locator))
       (values locator (cffi:foreign-type-size :pointer)))))
 
+(defun make-lob-locator-indirect (&optional empty)
+  (values
+   (foreign-alloc-with-initial-element :pointer (make-lob-locator empty))
+   (cffi:foreign-type-size :pointer)))
+
 (def function clob-type-p (sql-type)
   (typep sql-type 'sql-character-large-object-type))
 
