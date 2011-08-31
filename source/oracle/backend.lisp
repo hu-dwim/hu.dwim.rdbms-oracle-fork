@@ -313,6 +313,9 @@
   `(call-with-binder-buffer ,is-null ,bval ,btype ,typemap
                             (lambda (,ptr ,nbytes) ,@body)))
 
+(defun null-or-empty-value-p (x)
+  (member x '(:null nil #()) :test #'equalp))
+
 (defun call-with-binder (stm tx pos1 btype bval fn)
   (let ((is-null (or (eql bval :null)
                      (and (not bval) (not (typep btype 'sql-boolean-type))))))
@@ -335,7 +338,7 @@
                                        *default-oci-flags*))
             (prog1 (funcall fn)
               (when (and (lob-type-p btype)
-                         (not (member bval '(:null nil #()) :test #'equalp)))
+                         (not (null-or-empty-value-p bval)))
                 (upload-lob (cffi:mem-aref ptr :pointer) bval)))))))))
 
 (defmacro with-binder ((stm tx pos1 btype bval) &body body)
