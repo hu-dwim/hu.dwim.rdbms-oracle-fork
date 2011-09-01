@@ -56,20 +56,20 @@
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
                             (command string)
-                            &key visitor binding-types binding-values result-type
+                            &key visitor binding-types binding-values result-type out-position
                             &allow-other-keys)
   (rdbms.debug "Executing ~S" command)
   (let ((statement (prepare-command database transaction command)))
     (unwind-protect
-         (execute-prepared-statement transaction statement binding-types binding-values visitor result-type)
+         (execute-prepared-statement transaction statement binding-types binding-values visitor result-type out-position)
       (free-prepared-statement statement))))
 
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
                             (prepared-statement prepared-statement)
-                            &key visitor binding-types binding-values result-type
+                            &key visitor binding-types binding-values result-type out-position
                             &allow-other-keys)
-  (execute-prepared-statement transaction prepared-statement binding-types binding-values visitor result-type))
+  (execute-prepared-statement transaction prepared-statement binding-types binding-values visitor result-type out-position))
 
 (def method cleanup-transaction :after ((transaction oracle-transaction))
   (when (environment-handle-pointer transaction)
@@ -282,6 +282,30 @@
   (oci-call (oci:handle-free (statement-handle-of statement) oci:+htype-stmt+))
   (cffi:foreign-free (statement-handle-pointer statement)))
 
+;;; When executing a prepared statement, there are:
+;;;
+;;; - bind in parameters
+;;; - bind out parameters
+;;; - definers
+;;;
+;;; Binders represent the query parameters that are passed along and
+;;; marked in the query like :1 etc.  These can be "in" (where simple
+;;; data is simply passed directly to the server) or "out" (query
+;;; parameters after the RETURNING sql clause).  The out parameters
+;;; allow for lob uploading after an INSERT/UPDATE/DELETE query has
+;;; been executed at which point the server sent back appropriate lob
+;;; locators.  It doesn't seem to be possible to upload lobs via in
+;;; bind parameters.  The bind out parameters must use dynamic binding
+;;; (OCI_DATA_AT_EXEC mode) and use callbacks if more then one row is
+;;; returned, e.g. during nbatch (bulk insert/update).
+;;;
+;;; Definers represent results of the query as specified in the query
+;;; select-list.  Ordinary data are retrieved directly while lob data
+;;; are downloaded using download-clob or download-blob functions
+;;; after the results (and appropriate lob locators) were fetched.
+
+;;; binders
+
 (defun alloc-indicator (is-null)
   (foreign-alloc-with-initial-element 'oci:sb-2 (if is-null -1 0)))
 
@@ -290,44 +314,144 @@
       (and (cl:null bval)
            (not (typep btype 'sql-boolean-type)))))
 
-(defun convert-value (bval btype converter)
+(defun convert-value (bval btype converter out-variable-p)
   (cond
-    ((lob-type-p btype) ;; TODO THL need this case?
-     (multiple-value-bind (ptr len) (make-lob-locator-indirect)
-       (values ptr len (alloc-indicator t))))
+    ((consp bval) ;; nbatch, data allocated dynamically later
+     (values null #.(* 1024 1024) null)) ;; feel free to use other max size
+    ((and out-variable-p (lob-type-p btype))
+     (multiple-value-bind (ptr len) (make-lob-locator-indirect (equalp #() bval))
+       (values ptr len (alloc-indicator (is-null-p bval btype)))))
     ((is-null-p bval btype)
      (values null 0 (alloc-indicator t)))
     (t
      (multiple-value-bind (ptr len) (funcall converter bval)
        (values ptr len (alloc-indicator nil))))))
 
+;;; nbatch stuff
+
+(defvar *first-out-position*) ;; 0-based (vs 1-based binding position)
+
+;; TODO THL better then passing these through callback pointers?
+(defvar *dynamic-binding-values*)
+(defvar *dynamic-binding-types*)
+(defvar *dynamic-binding-locators*)
+
+(defvar *convert-value-alloc*)
+(defvar *convert-value-alloc-lob*)
+
+(defun free-later (x)
+  (push x *convert-value-alloc*)
+  x)
+
+(defun free-later-lob (x)
+  (push x *convert-value-alloc-lob*)
+  x)
+
+(defun out-position-p (pos0)
+  (when *first-out-position*
+    (<= *first-out-position* pos0)))
+
+(defun bind-dynamic-in (ictxp bindp iter index bufpp alenp piecep indpp)
+  (declare (ignore bindp index))
+  (let* ((pos0 (cffi-sys:pointer-address ictxp))
+         (value (nth iter (elt *dynamic-binding-values* pos0)))
+         (sql-type (elt *dynamic-binding-types* pos0)))
+    (multiple-value-bind (ptr len ind)
+        (convert-value value
+                       sql-type
+                       (typemap-lisp-to-oci (typemap-for-sql-type sql-type))
+                       (out-position-p pos0))
+      (free-later ptr)
+      (free-later ind)
+      (if (and (lob-type-p sql-type)
+               (not (cffi-sys:null-pointer-p ptr)))
+          (let ((locator (cffi:mem-ref ptr :pointer)))
+            (free-later-lob locator)
+            (setf (cffi:mem-ref bufpp :pointer) locator
+                  (cffi:mem-ref alenp 'oci:ub-4) len
+                  (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
+                  (cffi:mem-ref indpp :pointer) ind))
+          (setf (cffi:mem-ref bufpp :pointer) ptr
+                (cffi:mem-ref alenp 'oci:ub-4) len
+                (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
+                (cffi:mem-ref indpp :pointer) ind))))
+  oci:+continue+)
+
+(cffi:defcallback bind-dynamic-in-cb oci:sb-4 ((ictxp :pointer) ;; dvoid*
+                                               (bindp :pointer) ;; OCIBind*
+                                               (iter oci:ub-4)
+                                               (index oci:ub-4)
+                                               (bufpp :pointer) ;; dvoid**
+                                               (alenp :pointer) ;; ub4*
+                                               (piecep :pointer) ;; ub1*
+                                               (indpp :pointer)) ;; dvoid**
+  (bind-dynamic-in ictxp bindp iter index bufpp alenp piecep indpp))
+
+(defun bind-dynamic-out (octxp bindp iter index bufpp alenp piecep indpp rcodepp)
+  (declare (ignore bindp index))
+  (let* ((pos0 (cffi-sys:pointer-address octxp))
+         (value (nth iter (elt *dynamic-binding-values* pos0)))
+         (sql-type (elt *dynamic-binding-types* pos0)))
+    (assert (lob-type-p sql-type)) ;; TODO THL do not crash foreign code;-)
+    (multiple-value-bind (ptr len ind)
+        (convert-value value
+                       sql-type
+                       (typemap-lisp-to-oci (typemap-for-sql-type sql-type))
+                       t)
+      (free-later ptr)
+      (free-later ind)
+      (let ((locator (cffi:mem-ref ptr :pointer)))
+        (free-later-lob locator)
+        (push locator (aref *dynamic-binding-locators* pos0))
+        (setf (cffi:mem-ref bufpp :pointer) locator
+              (cffi:mem-ref (cffi:mem-ref alenp :pointer) 'oci:ub-4) len
+              (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
+              (cffi:mem-ref indpp :pointer) ind
+              (cffi:mem-ref rcodepp :pointer) null))))
+  oci:+continue+)
+
+(cffi:defcallback bind-dynamic-out-cb oci:sb-4 ((octxp :pointer) ;; dvoid*
+                                                (bindp :pointer) ;; OCIBind*
+                                                (iter oci:ub-4)
+                                                (index oci:ub-4)
+                                                (bufpp :pointer) ;; dvoid**
+                                                (alenp :pointer) ;; ub4**
+                                                (piecep :pointer) ;; ub1*
+                                                (indpp :pointer) ;; dvoid**
+                                                (rcodepp :pointer)) ;; ub2**
+  (bind-dynamic-out octxp bindp iter index bufpp alenp piecep indpp rcodepp))
+
+;;; more binders
+
 (defmacro with-initialized-foreign-object ((var type value) &body body)
   `(cffi:with-foreign-object (,var ,type)
      (setf (cffi:mem-ref ,var ,type) ,value)
      ,@body))
 
-(defun call-with-binder-buffer (bval btype typemap fn)
-  ;; TODO THL use typemap constructor and destructor?
-  ;; TODO THL use cffi:with- for ptr?
-  (multiple-value-bind (ptr len ind)
-      (convert-value bval btype (typemap-lisp-to-oci typemap))
-    (unwind-protect (funcall fn ptr len ind)
-      #+nil ;; TODO THL why freeing the locator crashes, double free?
-      (when (lob-type-p btype)
-        (cffi:foreign-free (cffi:mem-ref ptr :pointer)))
-      (cffi:foreign-free ptr)
-      (cffi:foreign-free ind))))
-
-(defmacro with-binder-buffer ((ptr len ind bval btype typemap) &body body)
-  `(call-with-binder-buffer ,bval ,btype ,typemap
-                            (lambda (,ptr ,len ,ind) ,@body)))
-
 (defun null-or-empty-value-p (x)
   (member x '(:null nil #()) :test #'equalp))
 
-(defun call-with-binder (stm tx pos1 btype bval fn)
-  (let ((typemap (typemap-for-sql-type btype)))
-    (with-binder-buffer (ptr len ind bval btype typemap)
+(defun guess-first-out-position (stm btype pos1)
+  (when (and (or (insert-p stm) (update-p stm))
+             (lob-type-p btype)
+             (not *first-out-position*))
+    ;; Ideally, compiling rdbms queries should return out-position
+    ;; alongside binding values and types and this information should
+    ;; be then passed to execute-command by perec. For now, I rely on
+    ;; the fact that lob bindings are always in the out position when
+    ;; insert/update queries are compiled using rdbms and run by
+    ;; perec.
+    (setq *first-out-position* (1- pos1))))
+
+(defun call-with-binder (stm tx pos1 btype bval nbatch fn) ;; TODO THL delete-p for out binders?
+  (guess-first-out-position stm btype pos1)
+  (let* ((typemap (typemap-for-sql-type btype))
+         (pos0 (1- pos1))
+         (out-position-p (out-position-p pos0)))
+    ;; TODO THL use typemap constructor and destructor?
+    ;; TODO THL use cffi:with- for ptr? instead of alloc and free?
+    (multiple-value-bind (ptr len ind)
+        (convert-value bval btype (typemap-lisp-to-oci typemap) out-position-p)
       (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
         (oci-call (oci:bind-by-pos (statement-handle-of stm)
                                    handle
@@ -341,27 +465,52 @@
                                    null ; rcodep
                                    0    ; maxarr_len
                                    null ; curelep
-                                   *default-oci-flags*))
+                                   (if nbatch
+                                       oci:+data-at-exec+
+                                       *default-oci-flags*)))
+        (cond
+          (nbatch
+           (oci-call (oci:bind-dynamic (cffi:mem-ref handle :pointer)
+                                       (error-handle-of tx)
+                                       (cffi-sys:make-pointer pos0)
+                                       (cffi:callback bind-dynamic-in-cb)
+                                       (cffi-sys:make-pointer pos0)
+                                       (cffi:callback bind-dynamic-out-cb))))
+          (t
+           (free-later ptr)
+           (free-later ind)
+           (when (and (lob-type-p btype)
+                      (not (cffi-sys:null-pointer-p ptr)))
+             (free-later-lob (cffi:mem-ref ptr :pointer)))))
         (prog1 (funcall fn)
-          (when (and (lob-type-p btype)
-                     (not (null-or-empty-value-p bval)))
-            (upload-lob (cffi:mem-aref ptr :pointer) bval)))))))
+          (when (and out-position-p (lob-type-p btype))
+            (cond
+              (nbatch
+               (loop
+                  for x in bval
+                  for locator in (nreverse (aref *dynamic-binding-locators* pos0))
+                  when (and locator (not (null-or-empty-value-p x)))
+                  do (upload-lob locator x)))
+              ((not (null-or-empty-value-p bval))
+               (upload-lob (cffi:mem-aref ptr :pointer) bval)))))))))
 
-(defmacro with-binder ((stm tx pos1 btype bval) &body body)
-  `(call-with-binder ,stm ,tx ,pos1 ,btype ,bval (lambda () ,@body)))
+(defmacro with-binder ((stm tx pos1 btype bval nbatch) &body body)
+  `(call-with-binder ,stm ,tx ,pos1 ,btype ,bval ,nbatch (lambda () ,@body)))
 
-(defun call-with-binders (stm tx btypes bvals fn)
+(defun call-with-binders (stm tx btypes bvals nbatch fn)
   (let ((n (length btypes)))
     (assert (eql n (length bvals)))
     (labels ((rec (i)
                (if (< i n)
-                   (with-binder (stm tx (1+ i) (aref btypes i) (aref bvals i))
+                   (with-binder (stm tx (1+ i) (aref btypes i) (aref bvals i) nbatch)
                      (rec (1+ i)))
                    (funcall fn))))
       (rec 0))))
 
-(defmacro with-binders ((stm tx btypes bvals) &body body)
-  `(call-with-binders ,stm ,tx ,btypes ,bvals (lambda () ,@body)))
+(defmacro with-binders ((stm tx btypes bvals nbatch) &body body)
+  `(call-with-binders ,stm ,tx ,btypes ,bvals ,nbatch (lambda () ,@body)))
+
+;;; defin3rs
 
 ;; use DEFIN3R, DEFINER clashes with hu.dwim.def:-{
 (defstruct (defin3r
@@ -502,6 +651,8 @@
 (defmacro with-defin3rs ((var stm tx) &body body)
   `(call-with-defin3rs ,stm ,tx (lambda (,var) ,@body)))
 
+;;; prepared statement execution
+
 (defun set-row-prefetching (stm rows-limit memory-limit)
   (when rows-limit
     (set-statement-attribute stm oci:+attr-prefetch-rows+ rows-limit))
@@ -529,12 +680,31 @@
         (list (make-list-row-visitor))
         (vector (make-vector-row-visitor)))))
 
-(defun execute-prepared-statement (transaction statement binding-types binding-values visitor result-type)
+(defun execute-prepared-statement (transaction statement binding-types binding-values visitor result-type out-position)
   ;; TODO THL configurable prefetching limits?
   (set-row-prefetching statement 1000000 #.(* 10 (expt 2 20)))
   ;; execute
-  (with-binders (statement transaction binding-types binding-values)
-    (stmt-execute statement *default-oci-flags*))
+  (let* ((nbatch (when binding-values
+                   (let ((u (remove-duplicates
+                             (loop
+                                for x across binding-values
+                                collect (when (consp x) (length x))))))
+                     (assert (<= 0 (length u) 1))
+                     (when (car u)
+                       (assert (numberp (car u)))
+                       (car u)))))
+         (*first-out-position* (and out-position (1- out-position)))
+         (*dynamic-binding-values* binding-values)
+         (*dynamic-binding-types* binding-types)
+         (*dynamic-binding-locators*
+          (and nbatch (make-array (length binding-types) :initial-element nil)))
+         (*convert-value-alloc* nil)
+         (*convert-value-alloc-lob* nil))
+    (unwind-protect
+         (with-binders (statement transaction binding-types binding-values nbatch)
+           (stmt-execute statement *default-oci-flags* nbatch))
+      (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
+      (mapc 'cffi:foreign-free *convert-value-alloc*)))
   (values
    ;; fetch  
    (with-defin3rs (d statement transaction)

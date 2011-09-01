@@ -158,7 +158,7 @@
 
 (def function string-to-clob (str)
   (assert (stringp str))
-  (make-lob-locator-indirect t))
+  (make-lob-locator-indirect t)) ;; actual value via upload-lob
 
 (def function string-from-clob (ptr len)
   (assert (= #.(cffi:foreign-type-size :pointer) len))
@@ -169,7 +169,7 @@
 
 (def function byte-array-to-blob (ba)
   (assert (typep ba 'vector)) ;; '(vector (unsigned-byte 8))
-  (make-lob-locator-indirect t))
+  (make-lob-locator-indirect t)) ;; actual value via upload-lob
 
 (def function byte-array-from-blob (ptr len)
   (assert (= #.(cffi:foreign-type-size :pointer) len))

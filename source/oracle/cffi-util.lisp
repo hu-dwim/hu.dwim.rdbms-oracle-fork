@@ -177,15 +177,15 @@
                                 oci:+ntv-syntax+
                                 *default-oci-flags*))))
 
-(def function stmt-execute (statement mode)
+(defun stmt-execute (statement mode nbatch)
   (oci-call (oci:stmt-execute (service-context-handle-of *transaction*)
                               (statement-handle-of statement)
                               (error-handle-of *transaction*)
-                              (if (select-p statement) 0 1)
+                              (or nbatch (if (select-p statement) 0 1))
                               0
                               null
                               null
-                              mode)))
+                              (if nbatch oci:+batch-mode+ mode))))
 
 (def function stmt-fetch-2 (statement number-of-rows orientation offset)
   #+allegro
