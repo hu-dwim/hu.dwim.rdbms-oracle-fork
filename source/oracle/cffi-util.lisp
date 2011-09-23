@@ -404,6 +404,32 @@
             (move (cffi:mem-ref bamtp 'oci:oraub-8))))))
     vec))
 
+(defun lob-chunk-size (svchp errhp locp)
+  (cffi:with-foreign-object (chunksizep 'oci:ub-4)
+    (oci-call (oci:lob-get-chunk-size svchp errhp locp chunksizep))
+    (cffi:mem-ref chunksizep 'oci:ub-4)))
+
+(defun lob-length (svchp errhp locp)
+  (cffi:with-foreign-object (lenp 'oci:ub-4)
+    (oci:lob-get-length svchp errhp locp lenp)
+    (cffi:mem-ref lenp 'oci:ub-4)))
+
+#-allegro
+(defun lob-length-2 (svchp errhp locp)
+  (cffi:with-foreign-object (lenp 'oci:ub-8)
+    (oci:lob-get-length-2 svchp errhp locp lenp)
+    (cffi:mem-ref lenp 'oci:ub-8)))
+
+(defun call-with-open-lob (locator mode fn)
+  (let ((svchp (service-context-handle-of *transaction*))
+        (errhp (error-handle-of *transaction*)))
+    (oci-call (oci:lob-open svchp errhp locator mode))
+    (unwind-protect (funcall fn locator)
+      (oci-call (oci:lob-close svchp errhp locator)))))
+
+(defmacro with-open-lob ((locator mode) &body body)
+  `(call-with-open-lob ,locator ,mode (lambda (,locator) ,@body)))
+
 (defun download-lob (locator &optional csid)
   #-allegro (download-lob-with-prefetching locator csid)
   #+allegro (download-lob-without-prefetching locator csid))
