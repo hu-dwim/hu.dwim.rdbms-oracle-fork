@@ -298,8 +298,15 @@
                              null null (or csid 0) oci:+sqlcs-implicit+))
     (assert (= (or amt siz) (cffi:mem-ref amtp 'oci:sb-4)))))
 
-(def function lob-enable-buffering (svchp errhp locator)
-  (oci-call (oci:lob-enable-buffering svchp errhp locator)))
+(defun call-with-lob-buffering (locator fn)
+  (let ((svchp (service-context-handle-of *transaction*))
+        (errhp (error-handle-of *transaction*)))
+    (oci-call (oci:lob-enable-buffering svchp errhp locator))
+    (unwind-protect (funcall fn locator)
+      (oci-call (oci:lob-disable-buffering svchp errhp locator)))))
+
+(defmacro with-lob-buffering ((locator) &body body)
+  `(call-with-lob-buffering ,locator (lambda (,locator) ,@body)))
 
 (def function lob-flush-buffer (svchp errhp locator)
   (oci-call (oci:lob-flush-buffer svchp errhp locator oci:+lob-buffer-nofree+)))
