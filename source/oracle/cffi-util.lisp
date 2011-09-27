@@ -473,6 +473,47 @@
                                     oci:+sqlcs-implicit+)))))
     *download-lob-buffer*))
 
+#-allegro
+(defun download-clob-in-one-piece/fixed-buf (locator &optional csid)
+  (let* ((svchp (service-context-handle-of *transaction*))
+         (errhp (error-handle-of *transaction*))
+         (siz #.(expt 10 5)))
+    (cffi:with-foreign-object (bufp 'oci:ub-1 siz)
+      (with-initialized-foreign-object (bamtp 'oci:oraub-8 0)
+        (with-initialized-foreign-object (camtp 'oci:oraub-8 0)
+          (oci-call (oci:lob-read-2 svchp errhp locator bamtp camtp
+                                    1 bufp siz
+                                    oci:+first-piece+
+                                    null null (or csid 0)
+                                    oci:+sqlcs-implicit+))
+          (let ((bamt (cffi:mem-ref bamtp 'oci:sb-4)))
+            (assert (< bamt siz))
+            (oci-string-to-lisp bufp bamt)))))))
+
+#-allegro
+(defun download-clob-in-one-piece/query-length (locator &optional csid)
+  (let* ((svchp (service-context-handle-of *transaction*))
+         (errhp (error-handle-of *transaction*))
+         (siz #+allegro (lob-length svchp errhp locator)
+              #-allegro (lob-length-2 svchp errhp locator)))
+    (assert (<= 0 siz))
+    (let* ((encoding (connection-encoding-of (database-of *transaction*)))
+           (character-width (cffi::null-terminator-len encoding))
+           (siz2 (+ character-width (* character-width siz))))
+      (cffi:with-foreign-object (bufp 'oci:ub-1 siz2)
+        (with-initialized-foreign-object (bamtp 'oci:oraub-8 0)
+          (with-initialized-foreign-object (camtp 'oci:oraub-8 0)
+            (oci-call (oci:lob-read-2 svchp errhp locator bamtp camtp
+                                      1 bufp siz2
+                                      oci:+first-piece+
+                                      null null (or csid 0)
+                                      oci:+sqlcs-implicit+))
+            (let ((bamt (cffi:mem-ref bamtp 'oci:sb-4))
+                  (camt (cffi:mem-ref camtp 'oci:sb-4)))
+              (assert (= (+ character-width bamt) siz2))
+              (assert (= camt siz))
+              (oci-string-to-lisp bufp bamt))))))))
+
 (defun download-lob (locator &optional csid)
   #-allegro (download-lob-with-prefetching locator csid)
   #+allegro (download-lob-without-prefetching locator csid))
