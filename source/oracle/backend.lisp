@@ -675,47 +675,47 @@
         (list (make-list-row-visitor))
         (vector (make-vector-row-visitor)))))
 
-(defun execute-prepared-statement (transaction statement binding-types binding-values visitor result-type out-position)
+(defun execute-prepared-statement (tx stm btypes bvalues visitor result-type out-position)
   ;; TODO THL configurable prefetching limits?
-  (set-row-prefetching statement 1000000 #.(* 10 (expt 2 20)))
+  (set-row-prefetching stm 1000000 #.(* 10 (expt 2 20)))
   ;; execute
-  (let* ((nbatch (when binding-values
+  (let* ((nbatch (when bvalues
                    (let ((u (remove-duplicates
                              (loop
-                                for x across binding-values
+                                for x across bvalues
                                 collect (when (consp x) (length x))))))
                      (assert (<= 0 (length u) 1))
                      (when (car u)
                        (assert (numberp (car u)))
                        (car u)))))
          (*first-out-position* (and out-position (1- out-position)))
-         (*dynamic-binding-values* binding-values)
-         (*dynamic-binding-types* binding-types)
+         (*dynamic-binding-values* bvalues)
+         (*dynamic-binding-types* btypes)
          (*dynamic-binding-locators*
-          (and nbatch (make-array (length binding-types) :initial-element nil)))
+          (and nbatch (make-array (length btypes) :initial-element nil)))
          (*convert-value-alloc* nil)
          (*convert-value-alloc-lob* nil))
     (unwind-protect
-         (with-binders (statement transaction binding-types binding-values nbatch)
-           (stmt-execute statement *default-oci-flags* nbatch))
+         (with-binders (stm tx btypes bvalues nbatch)
+           (stmt-execute stm *default-oci-flags* nbatch))
       (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
       (mapc 'cffi:foreign-free *convert-value-alloc*)))
   (values
    ;; fetch  
-   (with-defin3rs (d statement transaction)
+   (with-defin3rs (d stm tx)
      (when (plusp (length d))
        (loop
           with z = nil
           with xvisitor = (make-row-visitor visitor result-type)
-          while (when (stmt-fetch-2 statement 1 oci:+fetch-next+ 0)
+          while (when (stmt-fetch-2 stm 1 oci:+fetch-next+ 0)
                   (assert (eql 1 (get-statement-attribute
-                                  statement
+                                  stm
                                   oci:+attr-rows-fetched+
                                   'oci:ub-4)))
                   t)
           do (setq z (funcall xvisitor (decode-row d result-type)))
           finally (return z))))
-   (get-row-count-attribute statement)))
+   (get-row-count-attribute stm)))
 
 (def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?
 
