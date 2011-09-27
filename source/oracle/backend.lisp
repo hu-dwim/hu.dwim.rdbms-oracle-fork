@@ -423,11 +423,6 @@
 
 ;;; more binders
 
-(defmacro with-initialized-foreign-object ((var type value) &body body)
-  `(cffi:with-foreign-object (,var ,type)
-     (setf (cffi:mem-ref ,var ,type) ,value)
-     ,@body))
-
 (defun null-or-empty-value-p (x)
   (member x '(:null nil #()) :test #'equalp))
 

@@ -430,6 +430,11 @@
 (defmacro with-open-lob ((locator mode) &body body)
   `(call-with-open-lob ,locator ,mode (lambda (,locator) ,@body)))
 
+(defmacro with-initialized-foreign-object ((var type value) &body body)
+  `(cffi:with-foreign-object (,var ,type)
+     (setf (cffi:mem-ref ,var ,type) ,value)
+     ,@body))
+
 (defun download-lob (locator &optional csid)
   #-allegro (download-lob-with-prefetching locator csid)
   #+allegro (download-lob-without-prefetching locator csid))
