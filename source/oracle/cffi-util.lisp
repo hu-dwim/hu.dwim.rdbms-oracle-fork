@@ -435,6 +435,44 @@
      (setf (cffi:mem-ref ,var ,type) ,value)
      ,@body))
 
+#-allegro
+(defparameter *download-lob-buffer* nil)
+
+#-allegro
+(defun %download-lob-cb (ctxp bufp lenp piecep changed-bufpp changed-lenp)
+  (declare (ignore ctxp piecep changed-bufpp changed-lenp))
+  (dotimes (i lenp oci:+continue+)
+    (vector-push-extend (cffi:mem-aref bufp 'oci:ub-1 i) *download-lob-buffer*)))
+
+#-allegro
+(cffi:defcallback download-lob-cb oci:sb-4 ((ctxp :pointer)
+                                            (bufp :pointer)
+                                            (lenp oci:oraub-8)
+                                            (piecep oci:ub-1)
+                                            (changed-bufpp :pointer)
+                                            (changed-lenp :pointer))
+  (%download-lob-cb ctxp bufp lenp piecep changed-bufpp changed-lenp))
+
+#-allegro
+(defun download-lob-using-callback (locator &optional csid)
+  (let* ((svchp (service-context-handle-of *transaction*))
+         (errhp (error-handle-of *transaction*))
+         (siz (lob-chunk-size svchp errhp locator))
+         (*download-lob-buffer* (make-array siz
+                                            :element-type '(unsigned-byte 8)
+                                            :adjustable t
+                                            :fill-pointer 0)))
+    (cffi:with-foreign-object (bufp 'oci:ub-1 siz)
+      (with-initialized-foreign-object (bamtp 'oci:oraub-8 0)
+        (with-initialized-foreign-object (camtp 'oci:oraub-8 0)
+          (oci-call (oci:lob-read-2 svchp errhp locator bamtp camtp
+                                    1 bufp siz
+                                    oci:+first-piece+
+                                    null (cffi:callback download-lob-cb)
+                                    (or csid 0)
+                                    oci:+sqlcs-implicit+)))))
+    *download-lob-buffer*))
+
 (defun download-lob (locator &optional csid)
   #-allegro (download-lob-with-prefetching locator csid)
   #+allegro (download-lob-without-prefetching locator csid))
