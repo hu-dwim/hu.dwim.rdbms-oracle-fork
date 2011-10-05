@@ -75,9 +75,6 @@
   (= oci:+stmt-update+
      (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
 
-(def macro get-row-count-attribute (statement)
-  `(get-statement-attribute ,statement oci:+attr-row-count+ 'oci:ub-4))
-
 (def macro with-foreign-oci-string ((string c-string c-size &key (null-terminated-p #f)) &body body)
   `(cffi:with-foreign-string ((,c-string ,c-size) ,string
                               :encoding (connection-encoding-of (database-of *transaction*))
@@ -187,28 +184,32 @@
                               null
                               (if nbatch oci:+batch-mode+ mode))))
 
-(def function stmt-fetch-2 (statement number-of-rows orientation offset)
+(defun %stmt-fetch-2 (stm nrows orientation offset)
   #+allegro
-  (assert (zerop offset))
-  (let ((status
-         #+allegro ;; TODO THL report error when offset used?
-          (oci:stmt-fetch (statement-handle-of statement)
-                          (error-handle-of *transaction*)
-                          number-of-rows
-                          orientation
-                          *default-oci-flags*)
-          #-allegro
-          (oci:stmt-fetch-2 (statement-handle-of statement)
-                            (error-handle-of *transaction*)
-                            number-of-rows
-                            orientation
-                            offset
-                            *default-oci-flags*)))
-    (case status
-      (#.oci:+success+ #t)
-      (#.oci:+success-with-info+ #t) ;; warning, e.g. ORA-24347 sum over null
-      (#.oci:+no-data+ #f)
-      (t (handle-oci-error)))))
+  (progn
+    (assert (zerop offset))
+    (oci:stmt-fetch (statement-handle-of stm)
+                    (error-handle-of *transaction*)
+                    nrows
+                    orientation
+                    *default-oci-flags*))
+  #-allegro
+  (oci:stmt-fetch-2 (statement-handle-of stm)
+                    (error-handle-of *transaction*)
+                    nrows
+                    orientation
+                    offset
+                    *default-oci-flags*))
+
+(defun %stmt-fetch-next (stm nrows)
+  (%stmt-fetch-2 stm nrows oci:+fetch-next+ 0))
+
+(defun stmt-fetch-2 (stm nrows orientation offset)
+  (case (%stmt-fetch-2 stm nrows orientation offset)
+    (#.oci:+success+ t)
+    (#.oci:+success-with-info+ t) ;; warning, e.g. ORA-24347 sum over null
+    (#.oci:+no-data+ nil)
+    (t (handle-oci-error))))
 
 (def function stmt-fetch-last (statement)
   (stmt-fetch-2 statement 1 oci:+fetch-last+ 0))
