@@ -124,23 +124,32 @@ FROM(SELECT DISTINCT nr.nspname, r.relname, r.relowner, a.attname, nc.nspname,
    x(tblschema, tblname, tblowner, colname, cstrschema, cstrname)")
 
 (def method database-list-table-foreign-keys (table-name (database postgresql))
-  (map 'list
-       (lambda (row)
-	 (make-instance 'foreign-key-descriptor
-			:name (elt row 0)
-			:source-table (elt row 1)
-			:source-column (elt row 2)
-			:target-table (elt row 3)
-			:target-column (elt row 4)
-			:delete-rule (sql-rule-name-to-lisp (elt row 5))
-			:update-rule (sql-rule-name-to-lisp (elt row 6))))
-       (execute
-	(format nil "SELECT DISTINCT
+  (let ((catalog (getf (connection-specification-of *database*)
+		       :database))
+	(ccu (make-hash-table :test 'equal)))
+    (map nil
+	 (lambda (row)
+	   (setf (gethash (elt row 0) ccu) row))
+	 (execute
+	  (format nil "SELECT constraint_name, table_name, column_name FROM (~A) ccu WHERE constraint_catalog='~A'"
+		  *information_schema.constraint_column_usage*
+		  catalog)))
+    (map 'list
+	 (lambda (row)
+	   (let ((namtab (gethash (elt row 0) ccu)))
+	     (make-instance 'foreign-key-descriptor
+			    :name (elt row 0)
+			    :source-table (elt row 1)
+			    :source-column (elt row 2)
+			    :target-table (elt namtab 1)
+			    :target-column (elt namtab 2)
+			    :delete-rule (sql-rule-name-to-lisp (elt row 3))
+			    :update-rule (sql-rule-name-to-lisp (elt row 4)))))
+	 (execute
+	  (format nil "SELECT DISTINCT
                   tc.constraint_name,
                   tc.table_name,
                   kcu.column_name, 
-                  ccu.table_name AS foreign_table_name,
-                  ccu.column_name AS foreign_column_name,
                   rc.delete_rule,
                   rc.update_rule
                 FROM
@@ -148,19 +157,14 @@ FROM(SELECT DISTINCT nr.nspname, r.relname, r.relowner, a.attname, nc.nspname,
                   JOIN information_schema.key_column_usage AS kcu
                     ON tc.constraint_name = kcu.constraint_name
                     AND tc.constraint_catalog = kcu.constraint_catalog
-                  JOIN (~A) AS ccu
-                    ON ccu.constraint_name = tc.constraint_name
-                    AND ccu.constraint_catalog = tc.constraint_catalog
                   JOIN information_schema.referential_constraints AS rc
                     ON rc.constraint_name = tc.constraint_name
                     AND rc.constraint_catalog = tc.constraint_catalog
                 WHERE constraint_type = 'FOREIGN KEY'
                   AND tc.constraint_catalog='~A'
                   AND tc.table_name='~A';"
-		*information_schema.constraint_column_usage*
-		(getf (connection-specification-of *database*)
-		      :database)
-		(string-downcase table-name)))))
+		  catalog
+		  (string-downcase table-name))))))
 
 (def method database-list-view-definitions ((database postgresql))
   (execute "select viewname, definition from pg_views"
