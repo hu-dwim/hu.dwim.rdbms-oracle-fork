@@ -253,7 +253,8 @@
 (def ast-dialect-test test/syntax/format/create-index
   (sql-create-index :name "a"
                     :table-name "a"
-                    :columns (list "a" "a"))
+                    :columns (list (sql-column :name "a")
+                                   (sql-column :name "a")))
   ((oracle "CREATE INDEX \"a\" ON \"a\" (\"a\", \"a\")")
    (t "CREATE INDEX a ON a (a, a)")))
 
