@@ -125,6 +125,13 @@
         (funcall hu.dwim.rdbms::*transaction-creator*))
   (values))
 
+(def (function e) rollback-and-recreate-transaction ()
+  (declare (special *transaction-creator*))
+  (rollback)
+  (setq hu.dwim.rdbms::*transaction*
+        (funcall hu.dwim.rdbms::*transaction-creator*))
+  (values))
+
 (def (with-macro* e) with-transaction*
   (&rest args &key (default-terminal-action :commit) database take-over
          &allow-other-keys)
