@@ -119,7 +119,12 @@
 
 (def method format-sql-syntax-node
   ((x sql-full-text-search-query-outer-function) (database postgresql))
-  (let ((value-form (the-unquoted-lexical-variable (query-of x))))
+  (let ((value-form (let ((q (query-of x)))
+                      (etypecase q
+                        (hu.dwim.rdbms::sql-unquote
+                          (the-unquoted-lexical-variable q))
+                        (hu.dwim.rdbms::sql-literal
+                          (value-of q))))))
     (push-form-into-command-elements
      `(let ((*inner-function-replacement* ,value-form))
         (format-sql-syntax-node
