@@ -119,7 +119,12 @@
 
 (def method format-sql-syntax-node
   ((x sql-full-text-search-query-outer-function) (database postgresql))
-  (let ((value-form (the-unquoted-lexical-variable (query-of x))))
+  (let ((value-form (let ((q (query-of x)))
+                      (etypecase q
+                        (hu.dwim.rdbms::sql-unquote
+                          (the-unquoted-lexical-variable q))
+                        (hu.dwim.rdbms::sql-literal
+                          (value-of q))))))
     (push-form-into-command-elements
      `(let ((*inner-function-replacement* ,value-form))
         (format-sql-syntax-node
@@ -129,8 +134,8 @@
 
 (def method format-sql-syntax-node
   ((x sql-full-text-search-query-inner-function) (database postgresql))
-  ;; Here I ignore the the SQL-UNQUOTE because it's to late for it to
-  ;; be useful.  I use the unquoted value passed in from the outer
+  ;; Here I ignore the SQL-UNQUOTE because it's to late for it to be
+  ;; useful.  I use the unquoted value passed in from the outer
   ;; function instead.
   (format-sql-syntax-node *inner-function-replacement* database))
 
@@ -143,54 +148,42 @@
   ;; space.  The first word must be preceded by a space and the last
   ;; word must be followed by a space.  It is the responsibility of
   ;; the application to provide data in this format.
-  (labels ((pat (a b c)
-             (format nil "~a~a~a" a b c))
+  (labels ((sql-phrase (x)
+             (sql-like :string what
+                       :pattern x
+                       :case-sensitive-p nil))
+           (sql-pattern (x)
+             (flet ((op (l r)
+                      (sql-binary-operator :name "~"
+                                           :left what
+                                           :right (format nil "~a~a~a" l x r))))
+               (sql-or (op "^" "$")
+                       (op "^" "[ ]")
+                       (op "[ ]" "[ ]")
+                       (op "[ ]" "$"))))
+           (update (words phrases patterns)
+             (setf (query-of query) `(:and ,@words))
+             (apply 'sql-and
+                    (append (when words (list exp))
+                            (mapcar #'sql-phrase phrases)
+                            (mapcar #'sql-pattern patterns))))
+           (ugly (form)
+             (multiple-value-bind (words phrases patterns)
+                 (words-and-phrases-and-patterns-of-full-text-query form) ;; this fn is ugly
+               (update words phrases patterns)))
            (rec (q)
-             (etypecase q
-               ;; TODO THL the string case
-               ;; (string
-               ;;  (assert (not (find #\space q :test #'char=)))
-               ;;  ;; TODO THL wildcard as non-wildcard escaping on oracle
-               ;;  (princ q s))
-               (cons (ecase (car q)
-                       (:and
-                        (multiple-value-bind (words phrases patterns)
-                            (words-and-phrases-and-patterns-of-full-text-query q)
-                          (setf (query-of query) `(:and ,@words))
-                          (apply 'sql-and
-                                 (append (when words
-                                           (list exp))
-                                         (loop
-                                            for phrase in phrases
-                                            collect (sql-like
-                                                      :string what
-                                                      :pattern phrase
-                                                      :case-sensitive-p nil))
-                                         (loop
-                                            for pattern in patterns
-                                            collect (sql-or
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "^" pattern "$"))
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "^" pattern "[ ]"))
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "[ ]" pattern "[ ]"))
-                                                     (sql-binary-operator
-                                                       :name "~"
-                                                       :left what
-                                                       :right (pat "[ ]" pattern "$"))))))))
-                       ;; TODO THL the rest of the cases
-                       #+nil(:or)
-                       #+nil(:not)
-                       #+nil(:seq)
-                       #+nil(:wild))))))
-    (rec (query-of query))))
+             (if (atom q)
+                 (ugly `(:and ,q))
+                 (ecase (car q)
+                   (:and (ugly q))
+                   #+nil(:or (ugly `(:and ,q))) ;; TODO THL the rest of the cases
+                   (:not (ugly `(:and ,q)))
+                   (:wild (ugly `(:and ,q)))
+                   (:seq (ugly `(:and ,q)))))))
+    (let ((q (query-of query)))
+      (if q
+          (rec q)
+          (sql-literal :value t :type (sql-boolean-type) :suppress-unquoting t)))))
 
 (defun words-and-phrases-and-patterns-of-full-text-query (q)
   ;; Q has a restricted form (for now): one which allows term (a

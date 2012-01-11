@@ -678,3 +678,55 @@
 	  (format-string "ON DELETE SET NULL"))
 	 (:cascade
 	  (format-string "ON DELETE CASCADE")))))))
+
+;;; The following is very similar magic to the postgresql code, only
+;;; to make sure that full-text-search query for '(:and (:wild :any))
+;;; doesn't search for anything and behaves like the postgresql
+;;; version.  It might be worth to unify the postgresql and oracle
+;;; implementation after all.
+
+(defparameter *inner-function-replacement* nil)
+
+(defun rfind-if (fn tree)
+  ;; http://www.bookshelf.jp/texi/onlisp/onlisp_6.html
+  (if (atom tree)
+      (and (funcall fn tree) tree)
+      (or (rfind-if fn (car tree))
+          (when (cdr tree)
+            (rfind-if fn (cdr tree))))))
+
+(defun the-unquoted-lexical-variable (x) ;; TODO THL the perec:: symbols here?!
+  (assert (typep x 'sql-unquote))
+  (let ((y (rfind-if 'hu.dwim.perec::lexical-variable-p (form-of x))))
+    (assert y)
+    y))
+
+(defmethod format-sql-syntax-node
+    ((x sql-full-text-search-query-outer-function) (database oracle))
+  (let ((value-form (let ((q (query-of x)))
+                      (etypecase q
+                        (hu.dwim.rdbms::sql-unquote
+                          (the-unquoted-lexical-variable q))
+                        (hu.dwim.rdbms::sql-literal
+                          (value-of q))))))
+    (push-form-into-command-elements
+     `(let ((*inner-function-replacement* ,value-form))
+        (format-sql-syntax-node
+         (rewrite-full-text-search-query-outer-function
+          ,(exp-of x) ,(what-of x) ,value-form)
+         *database*)))))
+
+(defmethod format-sql-syntax-node
+    ((x sql-full-text-search-query-inner-function) (database oracle))
+  ;; Here I ignore the SQL-UNQUOTE because it's to late for it to be
+  ;; useful.  I use the unquoted value passed in from the outer
+  ;; function instead.
+  (format-sql-syntax-node *inner-function-replacement* database))
+
+(defun rewrite-full-text-search-query-outer-function (exp what query)
+  (declare (ignore what))
+  (if (query-of query) exp (sql-= 1 1))) ;; TRUE is not first class on oracle
+
+(defmethod (setf hu.dwim.rdbms:suppress-unquoting-p) (val x)
+  ;; default falback, called on inner function
+  )
