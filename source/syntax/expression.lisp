@@ -399,6 +399,51 @@
 (def method format-sql-literal ((q sql-full-text-search-query) db)
   (format-sql-syntax-node q db))
 
+(defun normalize-full-text-search-query (q)
+  (labels ((rec (x)
+             (if (atom x)
+                 (when x
+                   (if (stringp x)
+                       (unless (equal "" x)
+                         x)
+                       (ecase x
+                         ((:one :any) x))))
+                 (destructuring-bind (head &rest tail) x
+                   (ecase head
+                     (:within
+                      (let ((exp (rec (car tail)))
+                            (within (rec (cadr tail))))
+                        (cond
+                          ((and exp within) `(,head ,exp ,within))
+                          (exp exp))))
+                     ((:and :or)
+                      (let (z)
+                        (dolist (y tail)
+                          (let ((yy (rec y)))
+                            (when yy
+                              (pushnew yy z :test #'equal))))
+                        (when z
+                          (if (not (cdr z))
+                              (car z)
+                              `(,head ,@(nreverse z))))))
+                     (:not
+                      (let ((y (rec (car tail))))
+                        (when y
+                          `(,head ,y))))
+                     (:wild
+                      (let (z pre)
+                        (dolist (y tail)
+                          (let ((yy (rec y)))
+                            (when yy
+                              (unless (and (eq :any yy) (eq :any pre))
+                                (setq pre yy)
+                                (push yy z)))))
+                        (when z
+                          (unless (equal '(:any) z)
+                            `(,head ,@(nreverse z))))))
+                     (:seq x))))))
+    (rec q)))
+
 ;; TODO THL shouldn't this be part of sexp2sql and rdbms dependent on it?
 (defun full-text-search-query-to-sql (q backend)
   (with-output-to-string (s)

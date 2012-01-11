@@ -725,12 +725,7 @@
 
 (defun rewrite-full-text-search-query-outer-function (exp what query)
   (declare (ignore what))
-  (let ((q (query-of query)))
-    (if (or (equal '(:and (:wild :any)) q)
-            (when (eq :within (car q))
-              (equal '(:and (:wild :any)) (cadr q))))
-        (sql-= 1 1) ;; TRUE is not first class on oracle
-        exp)))
+  (if (query-of query) exp (sql-= 1 1))) ;; TRUE is not first class on oracle
 
 (defmethod (setf hu.dwim.rdbms:suppress-unquoting-p) (val x)
   ;; default falback, called on inner function
