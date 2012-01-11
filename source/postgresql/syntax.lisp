@@ -134,8 +134,8 @@
 
 (def method format-sql-syntax-node
   ((x sql-full-text-search-query-inner-function) (database postgresql))
-  ;; Here I ignore the the SQL-UNQUOTE because it's to late for it to
-  ;; be useful.  I use the unquoted value passed in from the outer
+  ;; Here I ignore the SQL-UNQUOTE because it's to late for it to be
+  ;; useful.  I use the unquoted value passed in from the outer
   ;; function instead.
   (format-sql-syntax-node *inner-function-replacement* database))
 
@@ -195,7 +195,10 @@
                        #+nil(:not)
                        #+nil(:seq)
                        #+nil(:wild))))))
-    (rec (query-of query))))
+    (let ((q (query-of query)))
+      (if (equal '(:and (:wild :any)) q)
+          (sql-literal :value t :type (sql-boolean-type) :suppress-unquoting t)
+          (rec q)))))
 
 (defun words-and-phrases-and-patterns-of-full-text-query (q)
   ;; Q has a restricted form (for now): one which allows term (a
