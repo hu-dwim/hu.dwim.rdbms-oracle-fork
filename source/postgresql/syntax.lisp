@@ -143,34 +143,24 @@
   ;; Similar to full-text-search-query-to-sql but this time creating
   ;; syntax-nodes and fixing the actual query.
   ;;
-  ;; IMPORTANT: For the phrase and pattern search to work, the data
-  ;; must be a list of words all on one line separated by single
-  ;; space.  The first word must be preceded by a space and the last
-  ;; word must be followed by a space.  It is the responsibility of
-  ;; the application to provide data in this format.
-  (labels ((sql-phrase (x)
-             (sql-like :string what
-                       :pattern x
-                       :case-sensitive-p nil))
-           (sql-pattern (x)
-             (flet ((op (l r)
-                      (sql-binary-operator :name "~"
-                                           :left what
-                                           :right (format nil "~a~a~a" l x r))))
-               (sql-or (op "^" "$")
-                       (op "^" "[ ]")
-                       (op "[ ]" "[ ]")
-                       (op "[ ]" "$"))))
-           (update (words phrases patterns)
+  ;; IMPORTANT: For the pattern search to work, the data must be a
+  ;; list of words all on one line separated by single space.  The
+  ;; first word must be preceded by a space and the last word must be
+  ;; followed by a space.  It is the responsibility of the application
+  ;; to provide data in this format.
+  (labels ((sql-pattern (x)
+             (sql-binary-operator :name "~"
+                                  :left what
+                                  :right (format nil "[ ]~a[ ]" x)))
+           (update (words patterns)
              (setf (query-of query) `(:and ,@words))
              (apply 'sql-and
                     (append (when words (list exp))
-                            (mapcar #'sql-phrase phrases)
                             (mapcar #'sql-pattern patterns))))
            (ugly (form)
-             (multiple-value-bind (words phrases patterns)
-                 (words-and-phrases-and-patterns-of-full-text-query form) ;; this fn is ugly
-               (update words phrases patterns)))
+             (multiple-value-bind (words patterns)
+                 (words-and-patterns-of-full-text-query form) ;; this fn is ugly
+               (update words patterns)))
            (rec (q)
              (if (atom q)
                  (ugly `(:and ,q))
@@ -185,70 +175,53 @@
           (rec q)
           (sql-literal :value t :type (sql-boolean-type) :suppress-unquoting t)))))
 
-(defun words-and-phrases-and-patterns-of-full-text-query (q)
-  ;; Q has a restricted form (for now): one which allows term (a
-  ;; word), exact phrase (without wildcards) and single word wildcard
-  ;; search (a pattern).  For example: (:AND "hello" "hi" (:WILD
-  ;; "wild1" :ANY) (:WILD :ANY "wild2") (:SEQ "einmal" "vor") (:SEQ
-  ;; "zweimal%" "nach")).  The trick here is that we can split the
-  ;; query into three parts: one full text search on words and the
-  ;; other one an ILIKE query on the (possibly array) of phrases and ~
-  ;; queries on patterns.  Anything more complicated would most likely
-  ;; mean building and/or/not logic expressions on top of @@, ILIKE
-  ;; and ~ expressions.
+(defun words-and-patterns-of-full-text-query (q)
   (let ((words nil)
-        (phrases nil)
         (patterns nil))
     (assert (eq :and (car q)))
     (dolist (x (cdr q))
       (etypecase x
         (string (push x words)) ;; pg doesn't interpret wildcards here
-        (cons (flet ((escape-like (x s)
-                       (loop
-                          for c across x
-                          do (princ (case c
-                                      (#\_ "\\_")
-                                      (#\% "\\%")
-                                      (t c))
-                                    s)))
-                     (escape-regexp (x s)
-                       (loop
-                          for c across x
-                          do (princ (case c
-                                      (#\. "[.]")
-                                      (#\* "[*]")
-                                      (#\^ "[^]")
-                                      (#\$ "[$]")
-                                      (#\( "[(]")
-                                      (#\) "[)]")
-                                      (#\| "[|]")
-                                      (#\\ "[\\]")
-                                      (#\[ "\\[")
-                                      (#\] "\\]")
-                                      (t c))
-                                    s))))
+        (cons (labels ((escape-regexp (x s)
+                         (loop
+                            for c across x
+                            do (princ (case c
+                                        (#\. "[.]")
+                                        (#\* "[*]")
+                                        (#\^ "[^]")
+                                        (#\$ "[$]")
+                                        (#\( "[(]")
+                                        (#\) "[)]")
+                                        (#\| "[|]")
+                                        (#\\ "[\\]")
+                                        (#\[ "\\[")
+                                        (#\] "\\]")
+                                        (t c))
+                                      s)))
+                       (wild (x)
+                         (with-output-to-string (s)
+                           (dolist (y (cdr x))
+                             (case y
+                               (:one (princ "[^ ]" s))
+                               (:any (princ "[^ ]*" s))
+                               (t (escape-regexp y s)))))))
                 (ecase (car x)
                   (:seq (dolist (y (cdr x))
-                          (push y words))
+                          (when (atom y)
+                            (push y words)))
                         (push (with-output-to-string (s)
-                                (princ "%" s)
                                 (loop
                                    for y in (cdr x)
                                    for n from 0
                                    do (progn
                                         (when (plusp n)
-                                          (princ " " s))
+                                          (princ "[ ]" s))
                                         (etypecase y
-                                          (string (escape-like y s)))))
-                                (princ "%" s))
-                              phrases))
-                  (:wild (push (with-output-to-string (s)
-                                 (dolist (y (cdr x))
-                                   (case y
-                                     (:one (princ "[^ ]" s))
-                                     (:any (princ "[^ ]*" s))
-                                     (t (escape-regexp y s)))))
-                               patterns)))))))
+                                          (string (escape-regexp y s))
+                                          (cons
+                                           (ecase (car y)
+                                             (:wild (princ (wild y) s))))))))
+                              patterns))
+                  (:wild (push (wild x) patterns)))))))
     (values (nreverse words)
-            (nreverse phrases)
             (nreverse patterns))))
