@@ -412,9 +412,9 @@
                    (ecase head
                      (:within
                       (let ((exp (rec (car tail)))
-                            (within (rec (cadr tail))))
+                            (domains (cdr tail)))
                         (cond
-                          ((and exp within) `(,head ,exp ,within))
+                          ((and exp domains) `(,head ,exp ,@domains))
                           (exp exp))))
                      ((:and :or)
                       (let (z)
@@ -477,13 +477,13 @@
                           (p (cdr q)))
                          ((eq :within (car q)) ;; http://download.oracle.com/docs/cd/B19306_01/text.102/b14218/cqoper.htm#i998525
                           (let ((x (cadr q))
-                                (section (caddr q)))
-                            (if (consp section)
+                                (domains (cddr q)))
+                            (if (cdr domains)
                                 (rec (cons :or
                                            (loop
-                                              for s in section
-                                              collect (list :within x s))))
-                                (p (list x) nil nil (format nil " within ~a" section))))) ;; TODO THL escape section name e.g. _ see doc?
+                                              for d in domains
+                                              collect `(:within ,x ,d))))
+                                (p (list x) nil nil (format nil " within ~a" (car domains)))))) ;; TODO THL escape section name e.g. _ see doc?
                          ((cddr q)
                           (p (cdr q)
                              (if (and (eq :postgresql backend)
