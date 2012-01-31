@@ -58,6 +58,10 @@
   (:format-sql-syntax-node
    (format-string " NOT NULL")))
 
+(def syntax-node sql-boolean-check-constraint (sql-constraint) ;; for oracle;-)
+  ((xname :type string))
+  (:format-sql-syntax-node))
+
 (def syntax-node sql-unique-constraint (sql-constraint-with-tablespace)
   ()
   (:format-sql-syntax-node

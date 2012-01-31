@@ -679,6 +679,13 @@
 	 (:cascade
 	  (format-string "ON DELETE CASCADE")))))))
 
+(defmethod format-sql-syntax-node ((x hu.dwim.rdbms::sql-boolean-check-constraint)
+                                   (db oracle))
+  (with-slots (xname) x
+    (format-string " CHECK (")
+    (format-sql-identifier xname db)
+    (format-string " IN ('Y','N'))")))
+
 ;;; The following is very similar magic to the postgresql code, only
 ;;; to make sure that full-text-search query for '(:and (:wild :any))
 ;;; doesn't search for anything and behaves like the postgresql
