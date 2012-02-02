@@ -82,7 +82,7 @@
     :prefix
     :type (member :prefix :postfix))
    (expression
-    :type sql-expression))
+    :type t #+nil sql-expression))	;also sql-identifier, number, ...
   (:format-sql-syntax-node
    (format-char "(")
    (ecase fix
@@ -98,9 +98,9 @@
 
 (def syntax-node sql-binary-operator (sql-operator)
   ((left
-    :type sql-expression)
+    :type t #+nil sql-expression)	;also sql-identifier, number, ...
    (right
-    :type sql-expression))
+    :type t #+nil sql-expression))
   (:format-sql-syntax-node
    (format-char "(")
    (format-sql-syntax-node left)
@@ -304,7 +304,7 @@
    (format-char ")")))
 
 (def syntax-node sql-project-to (sql-query-expression)
-  ((query :type sql-select)
+  ((query :type (or sql-select sql-subquery))
    (column))
   (:format-sql-syntax-node
    (let ((result-set (gensym))

@@ -11,7 +11,11 @@
 
 (def syntax-node named-sql-syntax-node (sql-syntax-node)
   ((name nil
-    :type sql-identifier*)))
+    :type t
+    ;; For some reason, we allow hu.dwim.perec::column here, which isn't
+    ;; defined yet at this point.  This is probably a knowledgeTools
+    ;; bug.  (FIXME)
+    #+nil (or sql-identifier* hu.dwim.perec::column))))
 
 (def print-object named-sql-syntax-node
   (princ (name-of -self-)))
@@ -39,9 +43,13 @@
 
 (def syntax-node sql-literal (sql-syntax-node)
   ((value
-    :type (or null boolean number string symbol))
+    :type t #+nil (or
+		   ;; Too many choices.  I'm giving up on listing all of them.
+		   ;; -- 2012-02-02 DFL
+		   null list boolean number string array symbol sql-unquote
+		   local-time:timestamp))
    (type nil
-    :type sql-type)
+    :type (or null sql-type))
    (suppress-unquoting
     :type boolean
     :initform nil))

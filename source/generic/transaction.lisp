@@ -26,7 +26,7 @@
     :type (member vector list cursor))
    (timestamp
     nil
-    :type integer)
+    :type (or null integer))
    (command-counter
     (make-instance 'command-counter)
     :type command-counter)

@@ -18,25 +18,25 @@
     :type (list sql-table-reference))
    (where
     nil
-    :type sql-expression)
+    :type (or null sql-expression))
    (group-by
     nil
     :type (list sql-expression))
    (having
     nil
-    :type sql-expression)
+    :type (or null sql-expression))
    (order-by
     nil
     :type list)                         ; TODO: element type
    (offset
     nil
-    :type (or null integer))
+    :type (or null integer sql-literal))
    (limit
     nil
-    :type (or null integer))
+    :type (or null integer sql-literal))
    (for
     nil
-    :type (member :update :share)
+    :type (member nil :update :share)
     :accessor for-of)
    (wait
     #t
@@ -102,14 +102,14 @@
 
 (def syntax-node sql-joined-table (sql-syntax-node)
   ((kind
-    :type (member :cross :inner :left :right :full :union))
+    :type (member nil :cross :inner :left :right :full :union))
    (left
     :type (or sql-table-reference list))
    (right
     :type (or sql-table-reference list))
    (on
     nil
-    :type sql-expression)
+    :type (or null sql-expression))
    (using
     nil
     :type (list sql-identifier*)))
