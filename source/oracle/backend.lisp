@@ -6,6 +6,10 @@
 
 (in-package :hu.dwim.rdbms.oracle)
 
+(defconstant OCI_ATTR_DEFAULT_LOBPREFETCH_SIZE 438)
+(defconstant OCI_ATTR_LOBPREFETCH_SIZE 439)
+(defconstant OCI_ATTR_LOBPREFETCH_LENGTH 440)
+
 (cffi:define-foreign-library oracle-oci
   (:windows (:or "ocixe.dll" "oci.dll"))
   (t (:default #-x86-64 "libocixe" #+x86-64 "libclntsh"))) ;; TODO THL dont use libocixe?
@@ -52,22 +56,20 @@
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
                             (command string)
-                            &key visitor binding-types binding-values result-type start-row row-limit
+                            &key visitor binding-types binding-values result-type out-position
                             &allow-other-keys)
   (rdbms.debug "Executing ~S" command)
   (let ((statement (prepare-command database transaction command)))
     (unwind-protect
-         (execute-prepared-statement transaction statement binding-types binding-values visitor result-type
-                                     :start-row start-row :row-limit row-limit)
+         (execute-prepared-statement transaction statement binding-types binding-values visitor result-type out-position)
       (free-prepared-statement statement))))
 
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
                             (prepared-statement prepared-statement)
-                            &key visitor binding-types binding-values result-type start-row row-limit
+                            &key visitor binding-types binding-values result-type out-position
                             &allow-other-keys)
-  (execute-prepared-statement transaction prepared-statement binding-types binding-values visitor result-type
-                              :start-row start-row :row-limit row-limit))
+  (execute-prepared-statement transaction prepared-statement binding-types binding-values visitor result-type out-position))
 
 (def method cleanup-transaction :after ((transaction oracle-transaction))
   (when (environment-handle-pointer transaction)
@@ -151,6 +153,9 @@
 	      (create-connection-pool environment dblink user password)))))
 
 (defvar *use-connection-pool* t)
+
+(defun set-default-lob-prefetching (value)
+  (set-session-attribute OCI_ATTR_DEFAULT_LOBPREFETCH_SIZE value))
 
 (def function connect (transaction)
   (assert (cl:null (environment-handle-pointer transaction)))
@@ -275,383 +280,260 @@
 
 (def function free-prepared-statement (statement)
   (oci-call (oci:handle-free (statement-handle-of statement) oci:+htype-stmt+))
-  (free-bindings (bindings-of statement))
   (cffi:foreign-free (statement-handle-pointer statement)))
 
-(def function execute-prepared-statement (transaction statement binding-types binding-values visitor result-type
-                                               &key (start-row 0) row-limit)
-  (setq start-row 0) ;; TODO THL why are start-row and row-limit here when it is handled by offset and limit in the sql query as oposed to fetching query results? probably old idea before handling that on the query side
-  (let ((needs-scrollable-cursor-p (and start-row (> start-row 0))))
-    ;; make bindings
-    (setf (bindings-of statement) (make-bindings statement transaction binding-types binding-values))
+;;; When executing a prepared statement, there are:
+;;;
+;;; - bind in parameters
+;;; - bind out parameters
+;;; - definers
+;;;
+;;; Binders represent the query parameters that are passed along and
+;;; marked in the query like :1 etc.  These can be "in" (where simple
+;;; data is simply passed directly to the server) or "out" (query
+;;; parameters after the RETURNING sql clause).  The out parameters
+;;; allow for lob uploading after an INSERT/UPDATE/DELETE query has
+;;; been executed at which point the server sent back appropriate lob
+;;; locators.  It doesn't seem to be possible to upload lobs via in
+;;; bind parameters.  The bind out parameters must use dynamic binding
+;;; (OCI_DATA_AT_EXEC mode) and use callbacks if more then one row is
+;;; returned, e.g. during nbatch (bulk insert/update).
+;;;
+;;; Definers represent results of the query as specified in the query
+;;; select-list.  Ordinary data are retrieved directly while lob data
+;;; are downloaded using download-clob or download-blob functions
+;;; after the results (and appropriate lob locators) were fetched.
 
-    ;; execute
-    (stmt-execute statement
-                  (if needs-scrollable-cursor-p
-                      (logior *default-oci-flags* oci:+stmt-scrollable-readonly+)
-                      *default-oci-flags*))
+;;; binders
 
-    ;; fetch
-    (cond
-      ((select-p statement)
-       (let* ((cursor (make-cursor transaction
-                                   :statement statement
-                                   :result-type result-type
-                                   :random-access-p needs-scrollable-cursor-p)))
-         (unwind-protect
-              (if visitor
-                  (for-each-row visitor cursor
-                                :start-position start-row
-                                :row-count row-limit)
-                  (collect-rows cursor
-                                :start-position start-row
-                                :row-count row-limit))
-           (close-cursor cursor))))
-      (t
-       (when (and (or (insert-p statement)
-                      (update-p statement))
-                  binding-types
-                  binding-values)
-         (loop
-            for type across binding-types
-            for value across binding-values
-            for binding in (bindings-of statement)
-            when (and (lob-type-p type)
-                      (not (member value '(:null nil #()) :test #'equalp)))
-            do (upload-lob (cffi:mem-aref (data-pointer-of binding) :pointer) value)))
-       (values nil (get-row-count-attribute statement)))))) ;; TODO THL what should the first value be?
+(defun alloc-indicator (is-null)
+  (foreign-alloc-with-initial-element 'oci:sb-2 (if is-null -1 0)))
 
-;;;;;;
-;;; Binding
+(defun is-null-p (bval btype)
+  (or (eql bval :null)
+      (and (cl:null bval)
+           (not (typep btype 'sql-boolean-type)))))
 
-(def class* oracle-binding ()
-  ((bind-handle-pointer)
-   (sql-type)
-   (typemap)
-   (data-pointer)
-   (data-size)
-   (indicator)))
+(defun convert-value (bval btype converter out-variable-p)
+  (cond
+    ((consp bval) ;; nbatch, data allocated dynamically later
+     (values null #.(* 1024 1024) null)) ;; feel free to use other max size
+    ((and out-variable-p (lob-type-p btype))
+     (multiple-value-bind (ptr len) (make-lob-locator-indirect (equalp #() bval))
+       (values ptr len (alloc-indicator (is-null-p bval btype)))))
+    ((is-null-p bval btype)
+     (values null 0 (alloc-indicator t)))
+    (t
+     (multiple-value-bind (ptr len) (funcall converter bval)
+       (values ptr len (alloc-indicator nil))))))
 
-(def function make-bindings (statement transaction binding-types binding-values)
-  (iter (for type :in-vector binding-types)
-        (for value :in-vector binding-values)
-        (for position :from 1)
-        (collect (make-binding statement transaction position type value))))
+;;; nbatch stuff
 
-(def function make-binding (statement transaction position sql-type value)
-  (let* ((statement-handle (statement-handle-of statement))
-         (error-handle (error-handle-of transaction))
-         (typemap (typemap-for-sql-type sql-type))
-         (oci-type-code (typemap-external-type typemap))
-         (converter (typemap-lisp-to-oci typemap))
-         (bind-handle-pointer (foreign-alloc-with-initial-element :pointer :initial-element null))
-         (is-null (or (eql value :null)
-                      (and (cl:null value) (not (typep sql-type 'sql-boolean-type)))))
-         (indicator (foreign-alloc-with-initial-element 'oci:sb-2 :initial-element (if is-null -1 0))))
-    (multiple-value-bind (data-pointer data-size)
-        (if is-null
-            (if (or (typep sql-type 'sql-character-large-object-type)
-                    (typep sql-type 'sql-binary-large-object-type))
-                (make-lob-locator t) ;; TODO THL why needed when indicator is -1?
-                (values null 0))
-            (funcall converter value))
+(defvar *first-out-position*) ;; 0-based (vs 1-based binding position)
 
-      (rdbms.dribble "Value ~S converted to ~A" value (dump-c-byte-array data-pointer data-size))
+;; TODO THL better then passing these through callback pointers?
+(defvar *dynamic-binding-values*)
+(defvar *dynamic-binding-types*)
+(defvar *dynamic-binding-locators*)
 
-      ;; TODO THL why **locator and not *locator? stmt-execute crashes:-{
-      (when (lob-type-p sql-type)
-        (setq data-pointer (foreign-alloc-with-initial-element :pointer :initial-element data-pointer)))
-      
-      (oci-call (oci:bind-by-pos statement-handle
-                                 bind-handle-pointer
-                                 error-handle
-                                 position
-                                 data-pointer
-                                 data-size
-                                 oci-type-code
-                                 indicator
-                                 null               ; alenp
-                                 null               ; rcodep
-                                 0                  ; maxarr_len
-                                 null               ; curelep
-                                 *default-oci-flags*))
-      (make-instance 'oracle-binding
-                     :bind-handle-pointer bind-handle-pointer
-                     :sql-type sql-type
-                     :typemap typemap
-                     :data-pointer data-pointer
-                     :data-size data-size
-                     :indicator indicator))))
+(defvar *convert-value-alloc*)
+(defvar *convert-value-alloc-lob*)
 
-(def function free-bindings (bindings)
-  (mapc 'free-binding bindings))
+(defun free-later (x)
+  (push x *convert-value-alloc*)
+  x)
 
-(def function free-binding (binding)
-  (cffi:foreign-free (bind-handle-pointer-of binding))
-  (cffi:foreign-free (indicator-of binding))
-  (let ((data-pointer (data-pointer-of binding)))
-    (unless (cffi:null-pointer-p data-pointer)
-      (cffi:foreign-free data-pointer))))
+(defun free-later-lob (x)
+  (push x *convert-value-alloc-lob*)
+  x)
 
-;;;;;;
-;;; Cursor
+(defun out-position-p (pos0)
+  (when *first-out-position*
+    (<= *first-out-position* pos0)))
 
-(def constant +number-of-buffered-rows+ 1) ; TODO prefetching rows probably superfluous, because OCI does that
+(defun bind-dynamic-in (ictxp bindp iter index bufpp alenp piecep indpp)
+  (declare (ignore bindp index))
+  (let* ((pos0 (cffi-sys:pointer-address ictxp))
+         (value (nth iter (elt *dynamic-binding-values* pos0)))
+         (sql-type (elt *dynamic-binding-types* pos0)))
+    (multiple-value-bind (ptr len ind)
+        (convert-value value
+                       sql-type
+                       (typemap-lisp-to-oci (typemap-for-sql-type sql-type))
+                       (out-position-p pos0))
+      (free-later ptr)
+      (free-later ind)
+      (if (and (lob-type-p sql-type)
+               (not (cffi-sys:null-pointer-p ptr)))
+          (let ((locator (cffi:mem-ref ptr :pointer)))
+            (free-later-lob locator)
+            (setf (cffi:mem-ref bufpp :pointer) locator
+                  (cffi:mem-ref alenp 'oci:ub-4) len
+                  (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
+                  (cffi:mem-ref indpp :pointer) ind))
+          (setf (cffi:mem-ref bufpp :pointer) ptr
+                (cffi:mem-ref alenp 'oci:ub-4) len
+                (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
+                (cffi:mem-ref indpp :pointer) ind))))
+  oci:+continue+)
 
-(def class* column-descriptor ()
-  ((define-handle-pointer)
-   (name)
-   (size)
-   (buffer)
-   (typemap)
-   (indicators)
-   (return-codes)
-   (paraminfo)))
+(cffi:defcallback bind-dynamic-in-cb oci:sb-4 ((ictxp :pointer) ;; dvoid*
+                                               (bindp :pointer) ;; OCIBind*
+                                               (iter oci:ub-4)
+                                               (index oci:ub-4)
+                                               (bufpp :pointer) ;; dvoid**
+                                               (alenp :pointer) ;; ub4*
+                                               (piecep :pointer) ;; ub1*
+                                               (indpp :pointer)) ;; dvoid**
+  (bind-dynamic-in ictxp bindp iter index bufpp alenp piecep indpp))
 
-(defun ensure-allocator (cache count)
-  (if (< count (length cache))
-      (or (elt cache count)
-	  (setf (elt cache count)
-		(compile
-		 nil
-		 `(lambda ()
-		    (declare (optimize speed))
-		    (let ((ptr (cffi:foreign-alloc :uint8 :count ,count)))
-		      (dotimes (i ,count)
-			(setf (cffi:mem-aref ptr :uint8 i) 0))
-		      ptr)))))
-      (progn
-	(lambda ()
-	  (warn "out of line call to foreign-alloc for count ~D" count)
-	  (cffi:foreign-alloc :uint8
-			      :count count
-			      :initial-element 0)))))
+(defun bind-dynamic-out (octxp bindp iter index bufpp alenp piecep indpp rcodepp)
+  (declare (ignore bindp index))
+  (let* ((pos0 (cffi-sys:pointer-address octxp))
+         (value (nth iter (elt *dynamic-binding-values* pos0)))
+         (sql-type (elt *dynamic-binding-types* pos0)))
+    (assert (lob-type-p sql-type)) ;; TODO THL do not crash foreign code;-)
+    (multiple-value-bind (ptr len ind)
+        (convert-value value
+                       sql-type
+                       (typemap-lisp-to-oci (typemap-for-sql-type sql-type))
+                       t)
+      (free-later ptr)
+      (free-later ind)
+      (let ((locator (cffi:mem-ref ptr :pointer)))
+        (free-later-lob locator)
+        (push locator (aref *dynamic-binding-locators* pos0))
+        (setf (cffi:mem-ref bufpp :pointer) locator
+              (cffi:mem-ref (cffi:mem-ref alenp :pointer) 'oci:ub-4) len
+              (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
+              (cffi:mem-ref indpp :pointer) ind
+              (cffi:mem-ref rcodepp :pointer) null))))
+  oci:+continue+)
 
-(defvar *paraminfo-lock* (bt:make-recursive-lock))
+(cffi:defcallback bind-dynamic-out-cb oci:sb-4 ((octxp :pointer) ;; dvoid*
+                                                (bindp :pointer) ;; OCIBind*
+                                                (iter oci:ub-4)
+                                                (index oci:ub-4)
+                                                (bufpp :pointer) ;; dvoid**
+                                                (alenp :pointer) ;; ub4**
+                                                (piecep :pointer) ;; ub1*
+                                                (indpp :pointer) ;; dvoid**
+                                                (rcodepp :pointer)) ;; ub2**
+  (bind-dynamic-out octxp bindp iter index bufpp alenp piecep indpp rcodepp))
 
-(defun clear-paraminfo-cache ()
-  (clrhash (paraminfos-of *database*)))
+;;; more binders
 
-(defun acquire-paraminfo
-    (column-type column-size precision scale database)
-  (let ((key (list column-type column-size precision scale))
-	(table (paraminfos-of database)))
-    (bt:with-recursive-lock-held (*paraminfo-lock*)
-      (let ((values (gethash key table)))
-	(cond
-	  (values
-	   (setf (gethash key table) (cdr values))
-	   (car values))
-	  (t
-	   nil))))))
+(defun null-or-empty-value-p (x)
+  (member x '(:null nil #()) :test #'equalp))
 
-(defun return-paraminfo (paraminfo database)
-  (setf (acquire-paraminfo (paraminfo-column-type paraminfo)
-			   (paraminfo-column-size paraminfo)
-			   (paraminfo-precision paraminfo)
-			   (paraminfo-scale paraminfo)
-			   database)
-	paraminfo))
+(defun guess-first-out-position (stm btype pos1)
+  (when (and (or (insert-p stm) (update-p stm))
+             (lob-type-p btype)
+             (not *first-out-position*))
+    ;; Ideally, compiling rdbms queries should return out-position
+    ;; alongside binding values and types and this information should
+    ;; be then passed to execute-command by perec. For now, I rely on
+    ;; the fact that lob bindings are always in the out position when
+    ;; insert/update queries are compiled using rdbms and run by
+    ;; perec.
+    (setq *first-out-position* (1- pos1))))
 
-(defun (setf acquire-paraminfo)
-    (newval column-type column-size precision scale database)
-  (let ((key (list column-type column-size precision scale))
-	(table (paraminfos-of database)))
-    (bt:with-recursive-lock-held (*paraminfo-lock*)
-      (push newval (gethash key table))))
-  newval)
+(defun call-with-binder (stm tx pos1 btype bval nbatch fn) ;; TODO THL delete-p for out binders?
+  (guess-first-out-position stm btype pos1)
+  (let* ((typemap (typemap-for-sql-type btype))
+         (pos0 (1- pos1))
+         (out-position-p (out-position-p pos0)))
+    ;; TODO THL use typemap constructor and destructor?
+    ;; TODO THL use cffi:with- for ptr? instead of alloc and free?
+    (multiple-value-bind (ptr len ind)
+        (convert-value bval btype (typemap-lisp-to-oci typemap) out-position-p)
+      (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
+        (oci-call (oci:bind-by-pos (statement-handle-of stm)
+                                   handle
+                                   (error-handle-of tx)
+                                   pos1
+                                   ptr
+                                   len
+                                   (typemap-external-type typemap)
+                                   ind
+                                   null ; alenp
+                                   null ; rcodep
+                                   0    ; maxarr_len
+                                   null ; curelep
+                                   (if nbatch
+                                       oci:+data-at-exec+
+                                       *default-oci-flags*)))
+        (cond
+          (nbatch
+           (oci-call (oci:bind-dynamic (cffi:mem-ref handle :pointer)
+                                       (error-handle-of tx)
+                                       (cffi-sys:make-pointer pos0)
+                                       (cffi:callback bind-dynamic-in-cb)
+                                       (cffi-sys:make-pointer pos0)
+                                       (cffi:callback bind-dynamic-out-cb))))
+          (t
+           (free-later ptr)
+           (free-later ind)
+           (when (and (lob-type-p btype)
+                      (not (cffi-sys:null-pointer-p ptr)))
+             (free-later-lob (cffi:mem-ref ptr :pointer)))))
+        (prog1 (funcall fn)
+          (when (and out-position-p (lob-type-p btype))
+            (cond
+              (nbatch
+               (loop
+                  for x in bval
+                  for locator in (nreverse (aref *dynamic-binding-locators* pos0))
+                  when (and locator (not (null-or-empty-value-p x)))
+                  do (upload-lob locator x)))
+              ((not (null-or-empty-value-p bval))
+               (upload-lob (cffi:mem-aref ptr :pointer) bval)))))))))
 
-(def function initialize-buffer-for-column (constructor buffer size number-of-rows)
-  (when constructor
-    (loop for i from 0 below number-of-rows
-       do (funcall constructor (cffi:inc-pointer buffer (* i size))))))
+(defmacro with-binder ((stm tx pos1 btype bval nbatch) &body body)
+  `(call-with-binder ,stm ,tx ,pos1 ,btype ,bval ,nbatch (lambda () ,@body)))
 
-(def function allocate-buffer-for-column (typemap column-size number-of-rows)
-  "Returns buffer, buffer-size, constructor"
-  (let* ((external-type (typemap-external-type typemap))
-	 (size (data-size-for external-type column-size))
-	 (funcache (load-time-value (make-array 10000 :initial-element nil)))
-	 (ptr (funcall (ensure-allocator funcache (* size number-of-rows))))
-	 (constructor (typemap-allocate-instance typemap)))
+(defun call-with-binders (stm tx btypes bvals nbatch fn)
+  (let ((n (length btypes)))
+    (assert (eql n (length bvals)))
+    (labels ((rec (i)
+               (if (< i n)
+                   (with-binder (stm tx (1+ i) (aref btypes i) (aref bvals i) nbatch)
+                     (rec (1+ i)))
+                   (funcall fn))))
+      (rec 0))))
 
-    (initialize-buffer-for-column constructor
-				  ptr
-				  size
-				  number-of-rows)
+(defmacro with-binders ((stm tx btypes bvals nbatch) &body body)
+  `(call-with-binders ,stm ,tx ,btypes ,bvals ,nbatch (lambda () ,@body)))
 
-    (values
-     ptr
-     size
-     constructor)))
+;;; defin3rs
+;;;
+;;; defin3rs = list of typemaps, one for each column in select-list.
+;;; That is enough because all necessary foreign buffers are allocated
+;;; only once outside the piece-wise fetch loop.  I had to use polling
+;;; fetch (as opposed to callback) because I assume no knowledge of
+;;; the select-list prior to running the query.  The resulting column
+;;; types in select-list are determined dynamically after
+;;; OCIStmtExecute.
 
-(def function free-column-descriptor (transaction descriptor)
-  (with-slots (size typemap buffer paraminfo) descriptor
-    (let ((destructor (typemap-free-instance typemap)))
-      (when destructor
-        (loop for i from 0 below +number-of-buffered-rows+
-              do (funcall destructor (cffi:mem-ref buffer :pointer (* i size)))))
-      (return-paraminfo paraminfo (database-of transaction)))))
+;; use DEFIN3R, DEFINER clashes with hu.dwim.def:-{
 
-(def class* oracle-cursor (cursor)
-  ((statement)
-   (column-descriptors)
-   (current-position 0)
-   (buffer-start-position 0)
-   (buffer-end-position 0)))
-
-(def generic column-descriptor-of (cursor index)
-  (:method ((cursor oracle-cursor) index)
-           (svref (column-descriptors-of cursor) index)))
-
-(def class* oracle-sequential-access-cursor (oracle-cursor sequential-access-cursor)
-  ((end-seen #f :type boolean)))
-
-(def class* oracle-random-access-cursor (oracle-cursor random-access-cursor)
-  ((row-count nil)))
-
-;;;;;;
-;;; Cursor API
-
-(def method make-cursor ((transaction oracle-transaction)
-                        &key statement random-access-p &allow-other-keys)
-  (if random-access-p
-      (aprog1 (make-instance 'oracle-random-access-cursor
-                             :statement statement
-                             :column-descriptors (make-column-descriptors statement transaction))
-        (row-count it)  ; TODO This positions to the last row so the response
-                            ;      time can be high. Try to delay this computation
-        (rdbms.dribble "Count of rows: ~D" (row-count-of it)))
-      (make-instance 'oracle-sequential-access-cursor
-                     :statement statement
-                     :column-descriptors (make-column-descriptors statement transaction))))
-
-(def method close-cursor ((cursor oracle-cursor))
-  (loop for descriptor across (column-descriptors-of cursor)
-        do (free-column-descriptor (transaction-of cursor) descriptor)))
-
-(def method cursor-position ((cursor oracle-sequential-access-cursor))
-  (unless (end-seen-p cursor)
-    (current-position-of cursor)))
-
-(def method cursor-position ((cursor oracle-random-access-cursor))
-  (with-slots (current-position row-count) cursor
-    (when (and (<= 0 current-position) (< current-position row-count))
-      current-position)))
-
-(def method (setf cursor-position) (where (cursor oracle-sequential-access-cursor))
-  (ecase where
-    (:first (setf (current-position-of cursor) 0))
-    (:next (incf (current-position-of cursor))))
-  (ensure-current-position-is-buffered cursor)) ; TODO delay this call
-
-(def method (setf cursor-position) (where (cursor oracle-random-access-cursor))
-  (if (integerp where)
-      (incf (current-position-of cursor) where)
-      (ecase where
-        (:first (setf (current-position-of cursor) 0))
-        (:last (setf (current-position-of cursor) (1- (row-count cursor))))
-        (:previous (decf (current-position-of cursor)))
-        (:next (incf (current-position-of cursor))))))
-
-(def method absolute-cursor-position ((cursor oracle-cursor))
-  (current-position-of cursor)) ; FIXME always the same as (cursor-position cursor) ?
-
-(def method (setf absolute-cursor-position) (where (cursor oracle-random-access-cursor))
-  (setf (current-position-of cursor) where))
-
-(def method row-count ((cursor oracle-sequential-access-cursor))
-  (error "Row count not supported by ~S" cursor))
-
-(def method row-count ((cursor oracle-random-access-cursor))
-  (with-slots (row-count statement buffer-start-position buffer-end-position) cursor
-    (unless row-count
-      (if (stmt-fetch-last statement)
-          (setf row-count (get-row-count-attribute statement)
-                buffer-start-position (1- row-count)
-                buffer-end-position row-count)
-          (setf row-count 0)))
-    row-count))
-
-(def method column-count ((cursor oracle-cursor))
-  (length (column-descriptors-of cursor)))
-
-(def method column-name ((cursor oracle-cursor) index)
-  (name-of (column-descriptor-of cursor index)))
-
-(def method column-type ((cursor oracle-cursor) index)
-  nil) ; TODO
-
-(def method column-value ((cursor oracle-cursor) index)
-  (when (ensure-current-position-is-buffered cursor)
-    (fetch-column-value (column-descriptor-of cursor index)
-                        (- (current-position-of cursor)
-                           (buffer-start-position-of cursor)))))
-
-#|
-(def function current-row (cursor &key result-type)
-  (when (ensure-current-position-is-buffered cursor)
-    (with-slots (column-descriptors current-position buffer-start-position default-result-type) cursor
-      (let ((row-index (- current-position buffer-start-position)))
-        (ecase (or result-type default-result-type)
-          (vector (aprog1 (make-array (length column-descriptors))
-                    (loop for descriptor across column-descriptors
-                          for column-index from 0
-                          do (setf (svref it column-index)
-                                   (fetch-column-value descriptor row-index)))))
-          (list (loop for descriptor across column-descriptors
-                      collect (fetch-column-value descriptor row-index))))))))
-|#
-
-;;;;;;
-;;; Cursor helpers
-
-(def function make-column-descriptors (statement transaction)
-  (coerce (cffi:with-foreign-objects ((param-descriptor-pointer :pointer))
-            (loop for column-index from 1  ; OCI 1-based indexing
-                  while (eql (oci:param-get (statement-handle-of statement)
-                                            oci:+htype-stmt+
-                                            (error-handle-of transaction)
-                                            param-descriptor-pointer
-                                            column-index)
-                             oci:+success+)
-                  collect (make-column-descriptor statement
-                                                  transaction
-                                                  column-index
-                                                  (cffi:mem-ref param-descriptor-pointer :pointer))))
-          'simple-vector))
-
-(defstruct (paraminfo (:constructor %make-paraminfo))
-  typemap
-  define-handle-pointer
-  return-codes
-  indicators
-  buffer
-  constructor
-  size
-  ;; hash key:
-  column-type
-  column-size
-  precision
-  scale)
-
-(defun %parse-paraminfo (param-descriptor)
-  (cffi:with-foreign-objects ((attribute-value :uint8 8) ; 8 byte buffer for attribute values
+(defun parse-paraminfo (paraminfo)
+  (cffi:with-foreign-objects ((attribute-value :uint8 8)
                               (attribute-value-length 'oci:ub-4))
     (macrolet
 	;; use a macro so that the compiler macro on mem-ref can see the
 	;; cffi-type!  essential for speed.
 	((%oci-attr-get (attribute-id cffi-type)
 	   `(progn
-	      (oci-attr-get param-descriptor ,attribute-id attribute-value attribute-value-length)
+	      (oci-attr-get paraminfo ,attribute-id attribute-value attribute-value-length)
 	      (cffi:mem-ref attribute-value ,cffi-type)))
 	 (oci-string-attr-get (attribute-id)
 	   `(progn
-	      (oci-attr-get param-descriptor ,attribute-id attribute-value attribute-value-length)
+	      (oci-attr-get paraminfo ,attribute-id attribute-value attribute-value-length)
 	      (oci-string-to-lisp
 	       (cffi:mem-ref attribute-value :pointer) ; OraText*
 	       (cffi:mem-ref attribute-value-length 'oci:ub-4)))))
-      (let ((column-name (oci-string-attr-get oci:+attr-name+))
-	    (column-type (%oci-attr-get oci:+attr-data-type+ 'oci:ub-2))
+      (let ((column-type (%oci-attr-get oci:+attr-data-type+ 'oci:ub-2))
 	    (column-size)
 	    (precision)
 	    (scale))
@@ -660,143 +542,287 @@
 	  ;; KLUDGE oci:+attr-data-size+ returned as ub-2, despite it is documented as ub-4
 	  (setf (cffi:mem-ref attribute-value :unsigned-short) 0)
 	  (setf column-size (%oci-attr-get oci:+attr-data-size+ 'oci:ub-2)))
-
-	(rdbms.dribble "Retrieving column: name=~W, type=~D, size=~D"
-		       column-name column-type column-size)
-
 	(when (= column-type oci:+sqlt-num+)
 	  ;; the type of the precision attribute is 'oci:sb-2, because we
 	  ;; use an implicit describe here (would be sb-1 for explicit describe)
 	  (setf precision (%oci-attr-get oci:+attr-precision+ 'oci:sb-2)
 		scale (%oci-attr-get oci:+attr-scale+ 'oci:sb-1)))
-	(values column-name column-type column-size precision scale)))))
+	(values column-type column-size precision scale)))))
 
-(defun make-paraminfo (column-type column-size precision scale)
-  (let ((typemap (typemap-for-internal-type column-type column-size :precision precision :scale scale)))
-    (multiple-value-bind (buffer size constructor)
-	(allocate-buffer-for-column
-	 typemap column-size +number-of-buffered-rows+)
-      (%make-paraminfo
-       :typemap typemap
-       :define-handle-pointer (foreign-alloc-with-initial-element :pointer :initial-element null)
-       :return-codes (cffi:foreign-alloc :unsigned-short :count +number-of-buffered-rows+)
-       :indicators (cffi:foreign-alloc :short :count +number-of-buffered-rows+)
-       :buffer buffer
-       :constructor constructor
-       :size size
-       :column-type column-type
-       :column-size column-size
-       :precision precision
-       :scale scale))))
+(defun set-lob-prefetching (defin3r-handle size length)
+  (when size
+    (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_SIZE
+                   size))
+  (when length
+    (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_LENGTH
+                   length)))
 
-(defun parse-paraminfo (param-descriptor database)
-  (multiple-value-bind (column-name column-type column-size precision scale)
-      (%parse-paraminfo param-descriptor)
-    (values column-name
-	    (let ((x (acquire-paraminfo
-		      column-type column-size precision scale database)))
-	      (cond
-		(x
-		 (initialize-buffer-for-column
-		  (paraminfo-constructor x)
-		  (paraminfo-buffer x)
-		  (paraminfo-size x)
-		  +number-of-buffered-rows+)
-		 x)
-		(t
-		 (make-paraminfo column-type column-size precision scale)))))))
+(defun call-with-defin3r (stm tx nbytes pos1 paraminfo fn)
+  (multiple-value-bind (ctype csize precision scale)
+      (parse-paraminfo paraminfo)
+    (let ((typemap (typemap-for-internal-type ctype csize
+                                              :precision precision
+                                              :scale scale)))
+      (with-initialized-foreign-object (defnp :pointer (cffi-sys:null-pointer))
+        (oci-call
+         (oci:define-by-pos
+             (statement-handle-of stm)
+             defnp
+           (error-handle-of tx)
+           pos1
+           (cffi-sys:null-pointer) ;;ptr
+           nbytes
+           (let ((x (typemap-external-type typemap)))
+             (case x
+               (#.oci:+sqlt-clob+ oci:+sqlt-lng+)
+               (#.oci:+sqlt-blob+ oci:+sqlt-lbi+)
+               (#.oci:+sqlt-bdouble+ oci:+sqlt-str+) ;; ora-3115 unsupported network type:-{
+               (t x)))
+           (cffi-sys:null-pointer) ;;indicators
+           null
+           (cffi-sys:null-pointer) ;;return-codes
+           oci:+dynamic-fetch+))
+        (funcall fn typemap))))) ;; typemap is enough as defin3r here
 
-(def function make-column-descriptor (statement transaction position param-descriptor)
-  (multiple-value-bind (column-name paraminfo)
-      (parse-paraminfo param-descriptor
-		       (database-of transaction))
-    (let ((typemap (paraminfo-typemap paraminfo))
-	  (define-handle-pointer (paraminfo-define-handle-pointer paraminfo))
-	  (return-codes (paraminfo-return-codes paraminfo))
-	  (indicators (paraminfo-indicators paraminfo))
-	  (buffer (paraminfo-buffer paraminfo))
-	  (size (paraminfo-size paraminfo)))
-      (oci:define-by-pos
-	  (statement-handle-of statement)
-	  define-handle-pointer
-	(error-handle-of transaction)
-	position
-	buffer
-	size
-	(typemap-external-type typemap)
-	indicators
-	null
-	return-codes
-	*default-oci-flags*)
-      (make-instance 'column-descriptor
-		     :define-handle-pointer define-handle-pointer
-		     :name column-name
-		     :size size
-		     :buffer buffer
-		     :typemap typemap
-		     :return-codes return-codes
-		     :indicators indicators
-		     :paraminfo paraminfo))))
+(defmacro with-defin3r ((var stm tx nbytes pos1 paraminfo) &body body)
+  `(call-with-defin3r ,stm ,tx ,nbytes ,pos1 ,paraminfo (lambda (,var) ,@body)))
 
-(def generic ensure-current-position-is-buffered (cursor)
-  (:method ((cursor oracle-sequential-access-cursor))
-           (with-slots (statement current-position
-                                  buffer-start-position buffer-end-position end-seen) cursor
-             (cond
-               ((< current-position buffer-start-position)
-                (if (zerop current-position)
-                    nil                 ; TODO reexecute statement
-                    (error "Trying to go backwards with a sequential cursor: ~S" cursor)))
-               (t
-                (loop until (or (> buffer-end-position current-position)
-                                end-seen)
-                  do (if (stmt-fetch-next statement +number-of-buffered-rows+)
-                         (setf buffer-start-position buffer-end-position
-                               buffer-end-position (get-row-count-attribute statement))
-                         (setf end-seen #t))
-                  finally (return-from ensure-current-position-is-buffered (not end-seen)))))))
+(defun call-with-defin3rs (stm tx nbytes fn)
+  (let ((d (make-array 8 :adjustable t :fill-pointer 0)))
+    (cffi:with-foreign-object (paraminfo :pointer)
+      (labels ((rec (i)
+                 (if (eql oci:+success+
+                          (oci:param-get (statement-handle-of stm)
+                                         oci:+htype-stmt+
+                                         (error-handle-of tx)
+                                         paraminfo
+                                         (1+ i)))
+                     (unwind-protect
+                          (with-defin3r (x stm tx nbytes (1+ i)
+                                           (cffi:mem-ref paraminfo :pointer))
+                            (vector-push-extend x d)
+                            (rec (1+ i)))
+                       (oci:descriptor-free paraminfo oci:+dtype-param+))
+                     (funcall fn d))))
+        (rec 0)))))
 
-  (:method ((cursor oracle-random-access-cursor))
-           (with-slots (statement current-position buffer-start-position buffer-end-position
-                                  row-count) cursor
-             (cond
-               ((or (< current-position 0)
-                    (>= current-position row-count))
-                #f)
-               ((>= current-position buffer-end-position) ; forward
-                (stmt-fetch-2 statement +number-of-buffered-rows+
-                              oci:+fetch-absolute+ (1+ current-position)) ; OCI 1-based indexing
-                (setf buffer-start-position current-position
-                      buffer-end-position (min (+ current-position +number-of-buffered-rows+)
-                                               row-count)))
-               ((< current-position buffer-start-position) ; backward
-                (stmt-fetch-2 statement +number-of-buffered-rows+ oci:+fetch-absolute+
-                              (1+ (max (- (1+ current-position) +number-of-buffered-rows+) 0))) ; 1-based
-                (setf buffer-start-position (max (- (1+ current-position) +number-of-buffered-rows+) 0)
-                      buffer-end-position (1+ current-position)))
-               (t
-                #t)))))
+(defmacro with-defin3rs ((var stm tx nbytes) &body body)
+  `(call-with-defin3rs ,stm ,tx ,nbytes (lambda (,var) ,@body)))
 
-(def function fetch-column-value (column-descriptor row-index)
-  (rdbms.debug "Fetching ~S from buffer at index ~D" (name-of column-descriptor) row-index)
-  (aprog1 (let* ((indicator (cffi:mem-aref (indicators-of column-descriptor) :short row-index)))
-            (if (= indicator -1)
-                :null
-                (let* ((buffer (buffer-of column-descriptor))
-                       (size (size-of column-descriptor))
-                       (converter (typemap-oci-to-lisp (typemap-of column-descriptor))))
-                  #+nil
-                  (rdbms.dribble "Buffer:~%~A"
-                                 (dump-c-byte-array buffer (* size +number-of-buffered-rows+)))
-                  (rdbms.dribble "Convert from ~D, size is ~D, content:~%~A"
-                                 (typemap-external-type (typemap-of column-descriptor)) size
-                                 (dump-c-byte-array (cffi:inc-pointer buffer (* row-index size))
-                                                    size))
+;;; prepared statement execution
 
-                  (funcall converter
-                           (cffi:inc-pointer buffer (* row-index size))
-                           size))))
-    (rdbms.debug "Fetched: ~S" it)))
+(defun set-row-prefetching (stm rows-limit memory-limit)
+  (when rows-limit
+    (set-statement-attribute stm oci:+attr-prefetch-rows+ rows-limit))
+  (when memory-limit
+    (set-statement-attribute stm oci:+attr-prefetch-memory+ memory-limit)))
+
+(defmacro with-list-appender (&body body)
+  (let ((x (gensym)))
+    `(let ((,x (cons nil nil)))
+       (setf (car ,x) ,x)
+       (macrolet ((appending (&body body)
+                    (let ((y (gensym)))
+                      `(let ((,y (cons (progn ,@body) nil)))
+                         (setf (cdar ,',x) ,y
+                               (car ,',x) ,y))))
+                  (appended ()
+                    `(cdr ,',x))
+                  (reset ()
+                    `(setf ,',x (cons nil nil)
+                           (car ,',x) ,',x)))
+         ,@body))))
+
+(defmacro with-vector-appender (&body body)
+  (let ((v (gensym)))
+    `(let ((,v (make-array 8 :adjustable t :fill-pointer 0)))
+       (macrolet ((appending (&body body)
+                    `(vector-push-extend (progn ,@body) ,',v))
+                  (appended ()
+                    `(progn ,',v))
+                  (reset ()
+                    `(setf (fill-pointer ,',v) 0)))
+         ,@body))))
+
+(defmacro with-appender (type &body body)
+  `(ecase ,type
+     (list (with-list-appender ,@body))
+     (vector (with-vector-appender ,@body))))
+
+(defun make-list-collector ()
+  (with-list-appender (lambda (x) (appending x) (appended))))
+
+(defun make-vector-collector ()
+  (with-vector-appender (lambda (x) (appending x) (appended))))
+
+(defun make-collector (custom-visitor result-type) ;; TODO THL remove this, apps should always specify visitor, both for cols and rows?
+  (or custom-visitor
+      (ecase result-type
+        (list (make-list-collector))
+        (vector (make-vector-collector)))))
+
+(defun attr-rows-fetched (stm)
+  (get-statement-attribute stm oci:+attr-rows-fetched+ 'oci:ub-4))
+
+(defun attr-row-count (stm)
+  (get-statement-attribute stm oci:+attr-row-count+ 'oci:ub-4))
+
+(defun decode-value (bufp nbytes alenp indp typemap) ;; TODO THL s/typemap/external-type
+  (let ((alen (cffi:mem-ref alenp 'oci:ub-4))
+        (ind (cffi:mem-ref indp 'oci:sb-2)))
+    ;;(print (list :@@@ alen))
+    (assert (< alen nbytes))
+    ;; TODO THL assert rcode bellow?  (oci-call (cffi:mem-ref rcodep
+    ;; 'oci:ub-2))
+    ;; http://www.helsinki.fi/~atkk_klp/oradoc/DOC/api/doc/OCI73/ch4a.htm
+    ;; Typical error codes would indicate that data in progv has been
+    ;; truncated [ORA-01406] or that a null occurred on a SELECT or
+    ;; PL/SQL FETCH [ORA-01405].  (print (list :@@@ alen ind))
+    ;;(print (list :@@@ (typemap-external-type typemap)))
+    (ecase ind
+      (-1 :null)
+      (0 (ecase (typemap-external-type typemap)
+           (#.oci:+sqlt-clob+ (oci-string-to-lisp bufp alen))
+           (#.oci:+sqlt-blob+
+            (let ((v (make-array alen :element-type '(unsigned-byte 8))))
+              (dotimes (i alen v)
+                (setf (aref v i) (cffi:mem-ref bufp :unsigned-char i)))))
+           (#.oci:+sqlt-timestamp+ (decode-datetime bufp))
+           (#.oci:+sqlt-timestamp-tz+ (decode-datetime-tz bufp))
+           (#.oci:+sqlt-str+ (oci-string-to-lisp bufp alen))
+           (#.oci:+sqlt-vnu+ (rational-from-varnum bufp alen))
+           (#.oci:+sqlt-afc+ (boolean-from-char bufp alen))
+           ;;(#.oci:+sqlt-int+ (error "hi1"))
+           ;;(#.oci:+sqlt-bfloat+ (error "hi2"))
+           (#.oci:+sqlt-bdouble+
+            (let ((*read-eval* nil)
+                  (*read-default-float-format* 'double-float))
+              (coerce (read-from-string (oci-string-to-lisp bufp alen)) 'double-float)))
+           (#.oci:+sqlt-dat+
+            (cdate-from-date bufp alen)
+            #+nil
+            (multiple-value-bind (y m d) (decode-date bufp)
+              (make-cdate y m d)))
+           ;;(#.oci:+sqlt-odt+ (error "hi3") (cdate-from-date bufp alen))
+           #+nil(t (funcall (typemap-oci-to-lisp typemap) bufp alen)))))))
+
+(defun fetch-cell (stm tx typemap nbytes
+                   bufp alenp indp rcodep
+                   hndlpp typep in_outp iterp idxp piecep)
+  (oci:stmt-get-piece-info (statement-handle-of stm)
+                           (error-handle-of tx)
+                           hndlpp
+                           typep
+                           in_outp
+                           iterp
+                           idxp
+                           piecep)
+  (setf (cffi:mem-ref alenp 'oci:ub-4) nbytes
+        ;; ind and rcode not necessary
+        (cffi:mem-ref indp 'oci:sb-2) 0
+        (cffi:mem-ref rcodep 'oci:ub-2) 0)
+  ;;(print (list :@@@ (typemap-external-type typemap) (cffi:mem-ref piecep 'oci:ub-1) oci::+one-piece+ oci:+first-piece+ oci:+next-piece+ oci:+last-piece+))
+  (oci:stmt-set-piece-info (cffi:mem-ref hndlpp :pointer)
+                           (cffi:mem-ref typep 'oci:ub-4)
+                           (error-handle-of tx)
+                           bufp
+                           alenp
+                           oci:+one-piece+
+                           indp
+                           rcodep)
+  ;; fetch
+  (let ((code (%stmt-fetch-next stm 1)))
+    (case code
+      (#.oci:+no-data+
+       (values code nil))
+      (#.oci:+need-data+
+       (values code (decode-value bufp nbytes alenp indp typemap)))
+      (#.oci:+success+
+       (values code (decode-value bufp nbytes alenp indp typemap)))
+      (t (oci-call code)))))
+
+(defun fetch-row (stm tx result-type d nbytes
+                  bufp alenp indp rcodep
+                  hndlpp typep in_outp iterp idxp piecep)
+  (let ((code (%stmt-fetch-next stm 1)))
+    (case code
+      (#.oci:+no-data+
+       (return-from fetch-row (values oci:+no-data+ nil)))
+      (#.oci:+need-data+
+       (with-appender result-type
+         (let (code)
+           (loop
+              for typemap across d
+              do (multiple-value-bind (code2 cell)
+                     (fetch-cell stm tx typemap nbytes
+                                 bufp alenp indp rcodep
+                                 hndlpp typep in_outp iterp idxp piecep)
+                   (setq code code2)
+                   (appending cell)))
+           (values code (appended)))))
+      (t (oci-call code)))))
+
+(defun fetch-rows (stm tx visitor result-type d nbytes
+                   bufp alenp indp rcodep
+                   hndlpp typep in_outp iterp idxp piecep)
+  (loop
+     with code = nil
+     with z = nil
+     with row-visitor = (make-collector visitor result-type)
+     until (eql oci:+no-data+ code)
+     do (multiple-value-bind (code2 row)
+            (fetch-row stm tx result-type d nbytes
+                       bufp alenp indp rcodep
+                       hndlpp typep in_outp iterp idxp piecep)
+          (setq code code2)
+          (when row
+            (setq z (funcall row-visitor row))))
+     finally (return z)))
+
+(defun execute-prepared-statement (tx stm btypes bvalues visitor result-type out-position)
+  ;; TODO THL configurable prefetching limits?
+  (set-row-prefetching stm 1000000 #.(* 10 (expt 2 20)))
+  ;; execute
+  (let* ((nbatch (when bvalues
+                   (let ((u (remove-duplicates
+                             (loop
+                                for x across bvalues
+                                collect (when (consp x) (length x))))))
+                     (assert (<= 0 (length u) 1))
+                     (when (car u)
+                       (assert (numberp (car u)))
+                       (car u)))))
+         (*first-out-position* (and out-position (1- out-position)))
+         (*dynamic-binding-values* bvalues)
+         (*dynamic-binding-types* btypes)
+         (*dynamic-binding-locators*
+          (and nbatch (make-array (length btypes) :initial-element nil)))
+         (*convert-value-alloc* nil)
+         (*convert-value-alloc-lob* nil))
+    (unwind-protect
+         (with-binders (stm tx btypes bvalues nbatch)
+           (stmt-execute stm *default-oci-flags* nbatch))
+      (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
+      (mapc 'cffi:foreign-free *convert-value-alloc*)))
+  (values
+   ;; fetch
+   (let ((nbytes #.(1+ (expt 2 20))))
+     (with-defin3rs (d stm tx nbytes)
+       (when (plusp (length d))
+         (cffi:with-foreign-object (bufp :uint8 nbytes)
+           (cffi:with-foreign-object (hndlpp :pointer) ;; dvoid**
+             (cffi:with-foreign-object (typep 'oci:ub-4)
+               (cffi:with-foreign-object (in_outp 'oci:ub-1)
+                 (cffi:with-foreign-object (iterp 'oci:ub-4)
+                   (cffi:with-foreign-object (idxp 'oci:ub-4)
+                     (cffi:with-foreign-object (piecep 'oci:ub-1)
+                       (cffi:with-foreign-object (alenp 'oci:ub-4)
+                         (cffi:with-foreign-object (indp 'oci:sb-2)
+                           (cffi:with-foreign-object (rcodep 'oci:ub-2)
+                             (fetch-rows stm tx visitor result-type d nbytes
+                                         bufp alenp indp rcodep
+                                         hndlpp typep in_outp iterp idxp piecep))))))))))))))
+   (attr-row-count stm)))
 
 (def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?
 

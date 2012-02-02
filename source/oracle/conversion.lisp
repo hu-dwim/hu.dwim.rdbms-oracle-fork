@@ -140,7 +140,7 @@
     (values varnum (1+ len))))
 
 (def function rational-from-varnum (ptr len)
-  (assert (= len 22))
+  (assert (<= len 22))
   (rational-from-number
    (cffi:inc-pointer ptr 1)
    (cffi:mem-aref ptr :uint8 0)))
@@ -157,8 +157,8 @@
   (oci-string-to-lisp ptr))
 
 (def function string-to-clob (str)
-  (assert (and (stringp str) (not (equal "" str))))
-  (make-lob-locator))
+  (assert (stringp str))
+  (make-lob-locator-indirect t)) ;; actual value via upload-lob
 
 (def function string-from-clob (ptr len)
   (assert (= #.(cffi:foreign-type-size :pointer) len))
@@ -168,8 +168,8 @@
 ;;; Binary data conversions
 
 (def function byte-array-to-blob (ba)
-  (assert (and (typep ba 'vector) (not (equalp #() ba)))) ; '(vector (unsigned-byte 8))
-  (make-lob-locator))
+  (assert (typep ba 'vector)) ;; '(vector (unsigned-byte 8))
+  (make-lob-locator-indirect t)) ;; actual value via upload-lob
 
 (def function byte-array-from-blob (ptr len)
   (assert (= #.(cffi:foreign-type-size :pointer) len))
@@ -177,6 +177,69 @@
 
 ;;;;;;
 ;;; Datetime conversions
+
+(defun decode-date (ptr) ;; for sqlt_dat=12 struct OCIDate (7 bytes)
+  #+nil
+  (let ((c (- (cffi:mem-aref ptr 'oci:ub-1 0) 100)) ; TODO BC dates
+        (y (- (cffi:mem-aref ptr 'oci:ub-1 1) 100))
+        (m (cffi:mem-aref ptr 'oci:ub-1 2))
+        (d (cffi:mem-aref ptr 'oci:ub-1 3)))
+    (let ((yy (+ (* 100 c) y)))
+      (assert (<= 1 yy 9999))
+      (assert (<= 1 m 12))
+      (assert (<= 1 d 31))
+      (values yy m d)))
+  (let ((y (cffi:mem-aref ptr 'oci:sb-2))
+        (m (cffi:mem-aref ptr 'oci:ub-1 2))
+        (d (cffi:mem-aref ptr 'oci:ub-1 3)))
+    (assert (<= -4712 y 9999))
+    (assert (<= 1 m 12))
+    (assert (<= 1 d 31))
+    (values y m d)))
+
+(defun decode-date2 (ptr) ;; for sqlt_odt=156 'oci:date (8 bytes)
+  (let ((y (cffi:foreign-slot-value ptr 'oci:date 'oci::date-yyyy))
+        (m (cffi:foreign-slot-value ptr 'oci:date 'oci::date-mm))
+        (d (cffi:foreign-slot-value ptr 'oci:date 'oci::date-dd)))
+    (assert (<= -4712 y 9999))
+    (assert (<= 1 m 12))
+    (assert (<= 1 d 31))
+    (values y m d)))
+
+(defun decode-time (ptr)
+  (let ((h (cffi:foreign-slot-value ptr 'oci:time 'oci::time-hh))
+        (m (cffi:foreign-slot-value ptr 'oci:time 'oci::time-mi))
+        (s (cffi:foreign-slot-value ptr 'oci:time 'oci::time-ss)))
+    (assert (<= 0 h 23))
+    (assert (<= 0 m 59))
+    (assert (<= 0 s 59))
+    (values h m s)))
+
+(defun decode-fsec (ptr)
+  (cffi:mem-ref ptr 'oci:ub-4))
+
+(defun decode-tz (ptr) ;; -> offset hour, offset minute
+  (values
+   (cffi:mem-ref ptr 'oci:sb-1)
+   (cffi:mem-ref ptr 'oci:sb-1 1)))
+
+(defun decode-datetime (ptr)
+  (multiple-value-bind (y m d) (decode-date ptr)
+    (let ((ptr2 (cffi-sys:inc-pointer ptr 4)))
+      (multiple-value-bind (hh mm ss) (decode-time ptr2)
+        (let* ((ptr3 (cffi-sys:inc-pointer ptr2 4)) ;; 3B + aligned
+               (fsec (decode-fsec ptr3)))
+          (encode-timestamp fsec ss mm hh d m y :timezone +utc-zone+))))))
+
+(defun decode-datetime-tz (ptr)
+  (multiple-value-bind (y m d) (decode-date ptr)
+    (let ((ptr2 (cffi-sys:inc-pointer ptr 4)))
+      (multiple-value-bind (hh mm ss) (decode-time ptr2)
+        (let* ((ptr3 (cffi-sys:inc-pointer ptr2 4)) ;; 3B + aligned
+               (fsec (decode-fsec ptr3))
+               (ptr4 (cffi-sys:inc-pointer ptr3 4)))
+          (multiple-value-bind (oh om) (decode-tz ptr4)
+            (encode-timestamp fsec ss mm hh d m y :timezone (make-timezone oh om))))))))
 
 ;; TODO local-time-related, applies to several functions below:
 ;; - when losing resolution, use nsec and round up to sec
@@ -341,7 +404,7 @@
                                          hh
                                          mm
                                          ss
-                                         (round (/ nsec 1000)) ; TODO check this, and other usages of the same slot
+                                         nsec
                                          (cffi:null-pointer)
                                          0)))
     (values oci-date-time-pointer
@@ -373,7 +436,7 @@
                                          min
                                          sec
                                          fsec))
-       (encode-timestamp (round (/ (cffi:mem-ref fsec 'oci:ub-4) 1000))
+       (encode-timestamp (cffi:mem-ref fsec 'oci:ub-4)
                          (cffi:mem-ref sec 'oci:ub-1)
                          (cffi:mem-ref min 'oci:ub-1)
                          (cffi:mem-ref hour 'oci:ub-1)
@@ -522,6 +585,9 @@ digit is the first or NIL for 0."
                (setf number n)
                (push d digits))
           finally (return (values digits count)))))
+
+;; quick test case:
+(assert (equalp #(197 3 46 2 68) (rational-to-byte-array 245016700)))
 
 (def function timezone-as-HHMM-string (timestamp)
   "Returns the time-zone of TIMESTAMP in [+-]HH:MM format."
