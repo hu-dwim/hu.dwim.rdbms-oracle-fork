@@ -8,9 +8,7 @@
 
 (defstruct typemap
   external-type
-  lisp-to-oci
-  allocate-instance
-  free-instance)
+  lisp-to-oci)
 
 ;; TODO add a naming convention, maybe *foo*?
 (def definer typemap (name &rest args)
@@ -54,9 +52,7 @@
 
 (def typemap string/clob
     :external-type oci:+sqlt-clob+
-    :lisp-to-oci 'string-to-clob
-    :allocate-instance 'allocate-oci-lob-locator
-    :free-instance 'free-oci-lob-locator)
+    :lisp-to-oci 'string-to-clob)
 
 (def typemap cdate/date
     :external-type oci:+sqlt-dat+
@@ -68,27 +64,19 @@
 
 (def typemap local-time/time
     :external-type oci:+sqlt-timestamp+
-    :lisp-to-oci 'local-time-to-time
-    :allocate-instance 'allocate-oci-date-time
-    :free-instance 'free-oci-date-time)
+    :lisp-to-oci 'local-time-to-time)
 
 (def typemap local-time/timestamp
     :external-type oci:+sqlt-timestamp+
-    :lisp-to-oci 'local-time-to-timestamp
-    :allocate-instance 'allocate-oci-date-time
-    :free-instance 'free-oci-date-time)
+    :lisp-to-oci 'local-time-to-timestamp)
 
 (def typemap local-time/timestamp-tz
     :external-type oci:+sqlt-timestamp-tz+
-    :lisp-to-oci 'local-time-to-timestamp-tz
-    :allocate-instance 'allocate-oci-date-time-tz
-    :free-instance 'free-oci-date-time-tz)
+    :lisp-to-oci 'local-time-to-timestamp-tz)
 
 (def typemap byte-array/blob
     :external-type oci:+sqlt-blob+
-    :lisp-to-oci 'byte-array-to-blob
-    :allocate-instance 'allocate-oci-lob-locator
-    :free-instance 'free-oci-lob-locator)
+    :lisp-to-oci 'byte-array-to-blob)
 
 (def generic typemap-for-sql-type (type)
 

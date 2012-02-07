@@ -240,24 +240,12 @@
 (def function allocate-oci-lob-locator (descriptor-ptr-ptr)
   (descriptor-alloc descriptor-ptr-ptr oci:+dtype-lob+))
 
-(def function allocate-oci-date-time (descriptor-ptr-ptr)
-  (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp+))
-
-(def function allocate-oci-date-time-tz (descriptor-ptr-ptr)
-  (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp-tz+))
-
 (def function descriptor-free (descriptor-ptr descriptor-type)
   (oci-call (oci:descriptor-free descriptor-ptr
                                  descriptor-type)))
 
 (def function free-oci-lob-locator (descriptor-ptr)
   (descriptor-free descriptor-ptr oci:+dtype-lob+))
-
-(def function free-oci-date-time (descriptor-ptr)
-  (descriptor-free descriptor-ptr oci:+dtype-timestamp+))
-
-(def function free-oci-date-time-tz (descriptor-ptr)
-  (descriptor-free descriptor-ptr oci:+dtype-timestamp-tz+))
 
 (def function set-empty-lob (locator)
   (cffi:with-foreign-object (attribute 'oci:ub-4)
