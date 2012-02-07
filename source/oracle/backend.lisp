@@ -704,7 +704,7 @@
             (multiple-value-bind (y m d) (decode-date bufp)
               (make-cdate y m d)))
            ;;(#.oci:+sqlt-odt+ (error "hi3") (cdate-from-date bufp alen))
-           #+nil(t (funcall (typemap-oci-to-lisp typemap) bufp alen)))))))
+           )))))
 
 (defun fetch-cell (stm tx typemap nbytes
                    bufp alenp indp rcodep
