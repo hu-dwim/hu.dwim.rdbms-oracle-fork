@@ -78,72 +78,55 @@
     :external-type oci:+sqlt-blob+
     :lisp-to-oci 'byte-array-to-blob)
 
-(def generic typemap-for-sql-type (type)
-
-  (:method ((type sql-boolean-type))
-           ;; booleans are stored as CHAR(1) internally
-           boolean/char)
-
-  (:method ((type sql-integer-type))
-           ;; integers are stored as NUMBER(x) internally
-           ;; where x=3  for 8-bit integers
-           ;;       x=5  for 16-bit integers
-           ;;       x=10 for 32-bit integers
-           ;;       x=38 for bigger integers
-           ;; their external type is byte/short/int or byte[22] (varnum format)
-           ;; XXX OCI does not have external type for int64?
-           (with-slots (bit-size) type
-             (cond
-               ((cl:null bit-size) integer/varnum)
-               ((<= bit-size 8) integer/int8)
-               ((<= bit-size 16) integer/int16)
-               ((<= bit-size 32) integer/int32)
-               (t integer/varnum))))
-
-  (:method ((type sql-float-type))
-           ;; floats are stored as BINARY_FLOAT or BINARY_DOUBLE internally
-           ;; their external type is float/double
-           (with-slots (bit-size) type
-             (assert (and bit-size (<= 32 bit-size 64)))
-             (cond
-               ((<= bit-size 32) float/bfloat)
-               ((<= bit-size 64) double/bdouble))))
-
-  (:method ((type sql-numeric-type))
-           ;; numeric values are stored as NUMBER internally
-           ;; their external type is byte[22] (varnum)
-           ;; NOTE: when rationals stored in a numeric column, their precision may be lost
-           ;;       e.g. 1/3 -> 3333.../10000...
-    (error "use more specific type with oracle backend") ;; TODO THL handle this better?
-           rational/varnum)
-
-  (:method ((type sql-character-type))
-           ;; string values stored as CHAR(x) internally
-           ;; their external format is zero terminated string
-           string/string)
-
-  (:method ((type sql-character-varying-type))
-           ;; string values stored as VARCHAR2(x) internally
-           ;; their external format is zero terminated string
-           string/string)
-
-  (:method ((type sql-character-large-object-type))
-           string/clob)
-
-  (:method ((type sql-date-type))
-           cdate/date)
-
-  (:method ((type sql-time-type))
-           local-time/time)
-
-  (:method ((type sql-timestamp-type))
-    local-time/timestamp)
-
-  (:method ((type sql-timestamp-with-timezone-type))
-    local-time/timestamp-tz)
-
-  (:method ((type sql-binary-large-object-type))
-           byte-array/blob))
+(defun typemap-for-sql-type (type)
+  (etypecase type
+    (sql-boolean-type
+      ;; booleans are stored as CHAR(1) internally
+      boolean/char)
+    (sql-integer-type
+      ;; integers are stored as NUMBER(x) internally
+      ;; where x=3  for 8-bit integers
+      ;;       x=5  for 16-bit integers
+      ;;       x=10 for 32-bit integers
+      ;;       x=38 for bigger integers
+      ;; their external type is byte/short/int or byte[22] (varnum format)
+      ;; XXX OCI does not have external type for int64?
+      (with-slots (bit-size) type
+        (cond
+          ((cl:null bit-size) integer/varnum)
+          ((<= bit-size 8) integer/int8)
+          ((<= bit-size 16) integer/int16)
+          ((<= bit-size 32) integer/int32)
+          (t integer/varnum))))
+    (sql-float-type
+      ;; floats are stored as BINARY_FLOAT or BINARY_DOUBLE internally
+      ;; their external type is float/double
+      (with-slots (bit-size) type
+        (assert (and bit-size (<= 32 bit-size 64)))
+        (cond
+          ((<= bit-size 32) float/bfloat)
+          ((<= bit-size 64) double/bdouble))))
+    (sql-numeric-type
+      ;; numeric values are stored as NUMBER internally
+      ;; their external type is byte[22] (varnum)
+      ;; NOTE: when rationals stored in a numeric column, their precision may be lost
+      ;;       e.g. 1/3 -> 3333.../10000...
+      (error "use more specific type with oracle backend") ;; TODO THL handle this better?
+      rational/varnum)
+    (sql-character-type
+      ;; string values stored as CHAR(x) internally
+      ;; their external format is zero terminated string
+      string/string)
+    (sql-character-varying-type
+      ;; string values stored as VARCHAR2(x) internally
+      ;; their external format is zero terminated string
+      string/string)
+    (sql-character-large-object-type string/clob)
+    (sql-date-type cdate/date)
+    (sql-time-type local-time/time)
+    (sql-timestamp-type local-time/timestamp)
+    (sql-timestamp-with-timezone-type local-time/timestamp-tz)
+    (sql-binary-large-object-type byte-array/blob)))
 
 (def function sql-type-for-internal-type (data-type char-length precision scale)
   (macrolet ((estringcase (keyform &body clauses)
