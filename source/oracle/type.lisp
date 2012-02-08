@@ -145,14 +145,6 @@
   (:method ((type sql-binary-large-object-type))
            byte-array/blob))
 
-(def function internal-type-for-sql-type (type)
-  (assert (typep *database* 'oracle))
-  (let ((str (format-sql-to-string type :database *database*)))
-    (string-downcase
-     (aif (position #\( str :test #'char=)
-          (subseq str 0 it)             ; TODO ???
-          str))))
-
 (def function sql-type-for-internal-type (data-type char-length precision scale)
   (macrolet ((estringcase (keyform &body clauses)
                `(cond

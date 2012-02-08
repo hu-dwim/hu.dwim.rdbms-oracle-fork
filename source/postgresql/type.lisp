@@ -51,36 +51,3 @@
                        ("timestamp" (make-instance 'sql-timestamp-type))
                        ("timestamptz" (make-instance 'sql-timestamp-with-timezone-type)))
         (error "Unknown internal type")))))
-
-(def generic internal-type-for-sql-type (type)
-  (:method (type)
-           (let ((str (format-sql-to-string type)))
-             (string-downcase
-              (aif (position #\( str :test #'char=)
-                   (subseq str 0 it)
-                   str))))
-
-  (:method ((type sql-integer-type))
-           (let ((bit-size (bit-size-of type)))
-             (cond ((null bit-size)
-                    "numeric")
-                   ((<= bit-size 16)
-                    "int2")
-                   ((<= bit-size 32)
-                    "int4")
-                   ((<= bit-size 64)
-                    "int8")
-                   (t
-                    "numeric"))))
-
-  (:method ((type sql-character-type))
-           "char")
-
-  (:method ((type sql-character-varying-type))
-           "varchar")
-
-  (:method ((type sql-timestamp-type))
-    "timestamp")
-
-  (:method ((type sql-timestamp-with-timezone-type))
-    "timestamptz"))
