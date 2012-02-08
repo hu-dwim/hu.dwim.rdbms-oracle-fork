@@ -314,7 +314,7 @@
       (and (cl:null bval)
            (not (typep btype 'sql-boolean-type)))))
 
-(defun convert-value (bval btype converter out-variable-p)
+(defun convert-value (bval btype out-variable-p)
   (cond
     ((consp bval) ;; nbatch, data allocated dynamically later
      (values null #.(* 1024 1024) null)) ;; feel free to use other max size
@@ -324,7 +324,8 @@
     ((is-null-p bval btype)
      (values null 0 (alloc-indicator t)))
     (t
-     (multiple-value-bind (ptr len) (funcall converter bval)
+     (multiple-value-bind (ptr len)
+         (funcall (typemap-lisp-to-oci (typemap-for-sql-type btype)) bval)
        (values ptr len (alloc-indicator nil))))))
 
 ;;; nbatch stuff
@@ -357,10 +358,7 @@
          (value (nth iter (elt *dynamic-binding-values* pos0)))
          (sql-type (elt *dynamic-binding-types* pos0)))
     (multiple-value-bind (ptr len ind)
-        (convert-value value
-                       sql-type
-                       (typemap-lisp-to-oci (typemap-for-sql-type sql-type))
-                       (out-position-p pos0))
+        (convert-value value sql-type (out-position-p pos0))
       (free-later ptr)
       (free-later ind)
       (if (and (lob-type-p sql-type)
@@ -394,10 +392,7 @@
          (sql-type (elt *dynamic-binding-types* pos0)))
     (assert (lob-type-p sql-type)) ;; TODO THL do not crash foreign code;-)
     (multiple-value-bind (ptr len ind)
-        (convert-value value
-                       sql-type
-                       (typemap-lisp-to-oci (typemap-for-sql-type sql-type))
-                       t)
+        (convert-value value sql-type t)
       (free-later ptr)
       (free-later ind)
       (let ((locator (cffi:mem-ref ptr :pointer)))
@@ -446,7 +441,7 @@
     ;; TODO THL use typemap constructor and destructor?
     ;; TODO THL use cffi:with- for ptr? instead of alloc and free?
     (multiple-value-bind (ptr len ind)
-        (convert-value bval btype (typemap-lisp-to-oci typemap) out-position-p)
+        (convert-value bval btype out-position-p)
       (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
         (oci-call (oci:bind-by-pos (statement-handle-of stm)
                                    handle
