@@ -72,6 +72,9 @@
      (unless wait
        (format-string " NOWAIT")))))
 
+(defmethod first-columns-of ((qe sql-select))
+  (list (car (columns-of qe))))
+
 ;; TODO shouldn't the NAME slot be called TABLE and be typed (or sql-identifier* sql-table)?
 (def syntax-node sql-table-alias (sql-identifier)
   ((name

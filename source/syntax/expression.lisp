@@ -297,26 +297,37 @@
 
 (def syntax-node sql-subquery (sql-query-expression)
   ((query
-    :type sql-select)) ;; TODO: extract query-expression from the ddl statement
+    ;; TODO: extract query-expression from the ddl statement
+    :type (or ;; DFL maybe this should be SQL-QUERY-EXPRESSION?
+	      sql-select sql-set-operation-expression)))
   (:format-sql-syntax-node
    (format-char "(")
    (format-sql-syntax-node query)
    (format-char ")")))
 
+(defgeneric first-columns-of (sql-qe))
+
+(defmethod first-columns-of ((qe sql-set-operation-expression))
+  (iter (for sub-qe in (subqueries-of qe))
+	(appending (first-columns-of sub-qe))))
+
+(defmethod first-columns-of ((qe sql-subquery))
+  (first-columns-of (query-of qe)))
+
 (def syntax-node sql-project-to (sql-query-expression)
-  ((query :type (or sql-select sql-subquery))
+  ((query :type sql-subquery)
    (column))
   (:format-sql-syntax-node
    (let ((result-set (gensym))
-	 (col (gensym)))
-     (setf (alias-of (car (columns-of
-			   (query-of
-			    (the sql-subquery query)))))
-	   col)
+	 (col-alias (gensym)))
+
+     (dolist (col-obj (first-columns-of (query-of (the sql-subquery query))))
+       (setf (alias-of col-obj) col-alias))
+
      (format-string "(SELECT ")
      (format-sql-identifier (make-instance 'sql-column-alias
 					   :table result-set
-					   :column col))
+					   :column col-alias))
      (format-string " FROM ")
      (format-sql-syntax-node query)
      (format-sql-identifier result-set)
