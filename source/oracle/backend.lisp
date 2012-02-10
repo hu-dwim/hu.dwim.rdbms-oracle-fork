@@ -501,16 +501,81 @@
   `(call-with-binders ,stm ,tx ,btypes ,bvals ,nbatch (lambda () ,@body)))
 
 ;;; defin3rs
-;;;
-;;; defin3rs = list of typemaps, one for each column in select-list.
-;;; That is enough because all necessary foreign buffers are allocated
-;;; only once outside the piece-wise fetch loop.  I had to use polling
-;;; fetch (as opposed to callback) because I assume no knowledge of
-;;; the select-list prior to running the query.  The resulting column
-;;; types in select-list are determined dynamically after
-;;; OCIStmtExecute.
 
 ;; use DEFIN3R, DEFINER clashes with hu.dwim.def:-{
+(defstruct (defin3r
+             (:constructor make-defin3r (indicators values value-size typemap)))
+  indicators values value-size typemap)
+
+(defun fetch-column-value (defin3r index)
+  (with-slots (indicators values value-size typemap) defin3r
+    (%decode-value (cffi:inc-pointer values (* index value-size))
+                   value-size
+                   (cffi:mem-aref indicators :short index)
+                   typemap)))
+
+(defun decode-row (defin3rs result-type)
+  (ecase result-type
+    (list
+     (loop
+        for d across defin3rs
+        collect (fetch-column-value d 0)))
+    (vector
+     (loop
+        with vals = (make-array (length defin3rs))
+        for d across defin3rs
+        for i from 0
+        do (setf (aref vals i) (fetch-column-value d 0))
+        finally (return vals)))))
+
+(defun allocate-oci-date-time (descriptor-ptr-ptr)
+  (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp+))
+
+(defun allocate-oci-date-time-tz (descriptor-ptr-ptr)
+  (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp-tz+))
+
+(defun free-oci-date-time (descriptor-ptr)
+  (descriptor-free descriptor-ptr oci:+dtype-timestamp+))
+
+(defun free-oci-date-time-tz (descriptor-ptr)
+  (descriptor-free descriptor-ptr oci:+dtype-timestamp-tz+))
+
+(defun typemap-allocate-instance (typemap)
+  (case (typemap-external-type typemap)
+    (112 #+nil :string/clob 'allocate-oci-lob-locator)
+    (187 #+nil :local-time/time 'allocate-oci-date-time)
+    ;;(:local-time/timestamp 'allocate-oci-date-time) ;; same as above
+    (188 #+nil :local-time/timestamp-tz 'allocate-oci-date-time-tz)
+    (113 #+nil :byte-array/blob 'allocate-oci-lob-locator)))
+
+(defun typemap-free-instance (typemap)
+  (case (typemap-external-type typemap)
+    (112 #+nil :string/clob 'free-oci-lob-locator)
+    (187 #+nil :local-time/time 'free-oci-date-time)
+    ;;(:local-time/timestamp 'free-oci-date-time) ;; same as above
+    (188 #+nil :local-time/timestamp-tz 'free-oci-date-time-tz)
+    (113 #+nil :byte-array/blob 'free-oci-lob-locator)))
+
+(defun call-with-defin3r-buffer (nrows nbytes1 typemap fn)
+  (let ((nbytes (* nrows nbytes1)))
+    (cffi:with-foreign-object (ptr :uint8 nbytes)
+      (dotimes (i nbytes)
+        (setf (cffi:mem-ref ptr :uint8 i) 0))
+      (let ((constructor (typemap-allocate-instance typemap)))
+        (when constructor
+          (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
+          (dotimes (i nrows)
+            (funcall constructor (cffi:inc-pointer ptr (* nbytes1 i))))))
+      (unwind-protect (funcall fn ptr nbytes)
+        (let ((destructor (typemap-free-instance typemap)))
+          (when destructor
+            (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
+            (dotimes (i nrows)
+              (funcall destructor (cffi:mem-ref ptr :pointer i)))))))))
+
+(defmacro with-defin3r-buffer ((ptr nbytes nrows nbytes1 typemap) &body body)
+  `(call-with-defin3r-buffer ,nrows ,nbytes1 ,typemap
+                             (lambda (,ptr ,nbytes) ,@body)))
 
 (defun parse-paraminfo (paraminfo)
   (cffi:with-foreign-objects ((attribute-value :uint8 8)
@@ -552,37 +617,36 @@
     (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_LENGTH
                    length)))
 
-(defun call-with-defin3r (stm tx nbytes pos1 paraminfo fn)
+(defun call-with-defin3r (stm tx pos1 paraminfo fn &aux (nrows 1)) ;; TODO nrows
   (multiple-value-bind (ctype csize precision scale)
       (parse-paraminfo paraminfo)
-    (let ((typemap (typemap-for-internal-type ctype csize
-                                              :precision precision
-                                              :scale scale)))
-      (with-initialized-foreign-object (defnp :pointer (cffi-sys:null-pointer))
-        (oci-call
-         (oci:define-by-pos
-             (statement-handle-of stm)
-             defnp
-           (error-handle-of tx)
-           pos1
-           (cffi-sys:null-pointer) ;;ptr
-           nbytes
-           (let ((x (typemap-external-type typemap)))
-             (case x
-               (#.oci:+sqlt-clob+ oci:+sqlt-lng+)
-               (#.oci:+sqlt-blob+ oci:+sqlt-lbi+)
-               (#.oci:+sqlt-bdouble+ oci:+sqlt-str+) ;; ora-3115 unsupported network type:-{
-               (t x)))
-           (cffi-sys:null-pointer) ;;indicators
-           null
-           (cffi-sys:null-pointer) ;;return-codes
-           oci:+dynamic-fetch+))
-        (funcall fn typemap))))) ;; typemap is enough as defin3r here
+    (let* ((typemap (typemap-for-internal-type ctype csize
+                                               :precision precision
+                                               :scale scale))
+           (external-type (typemap-external-type typemap))
+           (nbytes1 (data-size-for external-type csize)))
+      (cffi:with-foreign-object (return-codes :unsigned-short nrows)
+        (cffi:with-foreign-object (indicators :short nrows)
+          (with-defin3r-buffer (ptr nbytes nrows nbytes1 typemap)
+            (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
+              (oci:define-by-pos
+                  (statement-handle-of stm)
+                  handle
+                (error-handle-of tx)
+                pos1
+                ptr
+                nbytes
+                external-type
+                indicators
+                null
+                return-codes
+                *default-oci-flags*)
+              (funcall fn (make-defin3r indicators ptr nbytes1 typemap)))))))))
 
-(defmacro with-defin3r ((var stm tx nbytes pos1 paraminfo) &body body)
-  `(call-with-defin3r ,stm ,tx ,nbytes ,pos1 ,paraminfo (lambda (,var) ,@body)))
+(defmacro with-defin3r ((var stm tx pos1 paraminfo) &body body)
+  `(call-with-defin3r ,stm ,tx ,pos1 ,paraminfo (lambda (,var) ,@body)))
 
-(defun call-with-defin3rs (stm tx nbytes fn)
+(defun call-with-defin3rs (stm tx fn)
   (let ((d (make-array 8 :adjustable t :fill-pointer 0)))
     (cffi:with-foreign-object (paraminfo :pointer)
       (labels ((rec (i)
@@ -593,7 +657,7 @@
                                          paraminfo
                                          (1+ i)))
                      (unwind-protect
-                          (with-defin3r (x stm tx nbytes (1+ i)
+                          (with-defin3r (x stm tx (1+ i)
                                            (cffi:mem-ref paraminfo :pointer))
                             (vector-push-extend x d)
                             (rec (1+ i)))
@@ -601,8 +665,8 @@
                      (funcall fn d))))
         (rec 0)))))
 
-(defmacro with-defin3rs ((var stm tx nbytes) &body body)
-  `(call-with-defin3rs ,stm ,tx ,nbytes (lambda (,var) ,@body)))
+(defmacro with-defin3rs ((var stm tx) &body body)
+  `(call-with-defin3rs ,stm ,tx (lambda (,var) ,@body)))
 
 ;;; prepared statement execution
 
@@ -676,14 +740,16 @@
           (let ((v (make-array alen :element-type '(unsigned-byte 8))))
             (dotimes (i alen v)
               (setf (aref v i) (cffi:mem-ref bufp :unsigned-char i)))))
-         (#.oci:+sqlt-timestamp+ (decode-datetime bufp))
-         (#.oci:+sqlt-timestamp-tz+ (decode-datetime-tz bufp))
+         (#.oci:+sqlt-timestamp+ (local-time-from-timestamp bufp alen) #+nil(decode-datetime bufp))
+         (#.oci:+sqlt-timestamp-tz+ (local-time-from-timestamp-tz bufp alen) #+nil(decode-datetime-tz bufp))
          (#.oci:+sqlt-str+ (oci-string-to-lisp bufp alen))
          (#.oci:+sqlt-vnu+ (rational-from-varnum bufp alen))
          (#.oci:+sqlt-afc+ (boolean-from-char bufp alen))
          ;;(#.oci:+sqlt-int+ (error "hi1"))
          ;;(#.oci:+sqlt-bfloat+ (error "hi2"))
          (#.oci:+sqlt-bdouble+
+          (double-from-bdouble bufp alen)
+          #+nil
           (let ((*read-eval* nil)
                 (*read-default-float-format* 'double-float))
             (coerce (read-from-string (oci-string-to-lisp bufp alen)) 'double-float)))
@@ -708,79 +774,6 @@
     ;; PL/SQL FETCH [ORA-01405].  (print (list :@@@ alen ind))
     ;;(print (list :@@@ (typemap-external-type typemap)))
     (%decode-value bufp alen ind typemap)))
-
-(defun fetch-cell (stm tx typemap nbytes
-                   bufp alenp indp rcodep
-                   hndlpp typep in_outp iterp idxp piecep)
-  (oci:stmt-get-piece-info (statement-handle-of stm)
-                           (error-handle-of tx)
-                           hndlpp
-                           typep
-                           in_outp
-                           iterp
-                           idxp
-                           piecep)
-  (setf (cffi:mem-ref alenp 'oci:ub-4) nbytes
-        ;; ind and rcode not necessary
-        (cffi:mem-ref indp 'oci:sb-2) 0
-        (cffi:mem-ref rcodep 'oci:ub-2) 0)
-  ;;(print (list :@@@ (typemap-external-type typemap) (cffi:mem-ref piecep 'oci:ub-1) oci::+one-piece+ oci:+first-piece+ oci:+next-piece+ oci:+last-piece+))
-  (oci:stmt-set-piece-info (cffi:mem-ref hndlpp :pointer)
-                           (cffi:mem-ref typep 'oci:ub-4)
-                           (error-handle-of tx)
-                           bufp
-                           alenp
-                           oci:+one-piece+
-                           indp
-                           rcodep)
-  ;; fetch
-  (let ((code (%stmt-fetch-next stm 1)))
-    (case code
-      (#.oci:+no-data+
-       (values code nil))
-      (#.oci:+need-data+
-       (values code (decode-value bufp nbytes alenp indp typemap)))
-      (#.oci:+success+
-       (values code (decode-value bufp nbytes alenp indp typemap)))
-      (t (oci-call code)))))
-
-(defun fetch-row (stm tx result-type d nbytes
-                  bufp alenp indp rcodep
-                  hndlpp typep in_outp iterp idxp piecep)
-  (let ((code (%stmt-fetch-next stm 1)))
-    (case code
-      (#.oci:+no-data+
-       (return-from fetch-row (values oci:+no-data+ nil)))
-      (#.oci:+need-data+
-       (with-appender result-type
-         (let (code)
-           (loop
-              for typemap across d
-              do (multiple-value-bind (code2 cell)
-                     (fetch-cell stm tx typemap nbytes
-                                 bufp alenp indp rcodep
-                                 hndlpp typep in_outp iterp idxp piecep)
-                   (setq code code2)
-                   (appending cell)))
-           (values code (appended)))))
-      (t (oci-call code)))))
-
-(defun fetch-rows (stm tx visitor result-type d nbytes
-                   bufp alenp indp rcodep
-                   hndlpp typep in_outp iterp idxp piecep)
-  (loop
-     with code = nil
-     with z = nil
-     with row-visitor = (make-collector visitor result-type)
-     until (eql oci:+no-data+ code)
-     do (multiple-value-bind (code2 row)
-            (fetch-row stm tx result-type d nbytes
-                       bufp alenp indp rcodep
-                       hndlpp typep in_outp iterp idxp piecep)
-          (setq code code2)
-          (when row
-            (setq z (funcall row-visitor row))))
-     finally (return z)))
 
 (defun execute-prepared-statement (tx stm btypes bvalues visitor result-type out-position)
   ;; TODO THL configurable prefetching limits?
@@ -809,22 +802,16 @@
       (mapc 'cffi:foreign-free *convert-value-alloc*)))
   (values
    ;; fetch
-   (let ((nbytes #.(1+ (expt 2 20))))
-     (with-defin3rs (d stm tx nbytes)
-       (when (plusp (length d))
-         (cffi:with-foreign-object (bufp :uint8 nbytes)
-           (cffi:with-foreign-object (hndlpp :pointer) ;; dvoid**
-             (cffi:with-foreign-object (typep 'oci:ub-4)
-               (cffi:with-foreign-object (in_outp 'oci:ub-1)
-                 (cffi:with-foreign-object (iterp 'oci:ub-4)
-                   (cffi:with-foreign-object (idxp 'oci:ub-4)
-                     (cffi:with-foreign-object (piecep 'oci:ub-1)
-                       (cffi:with-foreign-object (alenp 'oci:ub-4)
-                         (cffi:with-foreign-object (indp 'oci:sb-2)
-                           (cffi:with-foreign-object (rcodep 'oci:ub-2)
-                             (fetch-rows stm tx visitor result-type d nbytes
-                                         bufp alenp indp rcodep
-                                         hndlpp typep in_outp iterp idxp piecep))))))))))))))
+   (with-defin3rs (d stm tx)
+     (when (plusp (length d))
+       (loop
+          with z = nil
+          with xvisitor = (make-collector visitor result-type)
+          while (when (stmt-fetch-2 stm 1 oci:+fetch-next+ 0)
+                  (assert (eql 1 (attr-rows-fetched stm)))
+                  t)
+          do (setq z (funcall xvisitor (decode-row d result-type)))
+          finally (return z))))
    (attr-row-count stm)))
 
 (def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?
