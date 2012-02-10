@@ -662,6 +662,39 @@
 (defun attr-row-count (stm)
   (get-statement-attribute stm oci:+attr-row-count+ 'oci:ub-4))
 
+(defun %decode-value (bufp alen ind typemap)
+  (ecase ind
+    (-1 :null)
+    (0 (ecase (typemap-external-type typemap)
+         (#.oci:+sqlt-clob+
+          (string-from-clob bufp alen)
+          #+nil
+          (oci-string-to-lisp bufp alen))
+         (#.oci:+sqlt-blob+
+          (byte-array-from-blob bufp alen)
+          #+nil
+          (let ((v (make-array alen :element-type '(unsigned-byte 8))))
+            (dotimes (i alen v)
+              (setf (aref v i) (cffi:mem-ref bufp :unsigned-char i)))))
+         (#.oci:+sqlt-timestamp+ (decode-datetime bufp))
+         (#.oci:+sqlt-timestamp-tz+ (decode-datetime-tz bufp))
+         (#.oci:+sqlt-str+ (oci-string-to-lisp bufp alen))
+         (#.oci:+sqlt-vnu+ (rational-from-varnum bufp alen))
+         (#.oci:+sqlt-afc+ (boolean-from-char bufp alen))
+         ;;(#.oci:+sqlt-int+ (error "hi1"))
+         ;;(#.oci:+sqlt-bfloat+ (error "hi2"))
+         (#.oci:+sqlt-bdouble+
+          (let ((*read-eval* nil)
+                (*read-default-float-format* 'double-float))
+            (coerce (read-from-string (oci-string-to-lisp bufp alen)) 'double-float)))
+         (#.oci:+sqlt-dat+
+          (cdate-from-date bufp alen)
+          #+nil
+          (multiple-value-bind (y m d) (decode-date bufp)
+            (make-cdate y m d)))
+         ;;(#.oci:+sqlt-odt+ (error "hi3") (cdate-from-date bufp alen))
+         ))))
+
 (defun decode-value (bufp nbytes alenp indp typemap) ;; TODO THL s/typemap/external-type
   (let ((alen (cffi:mem-ref alenp 'oci:ub-4))
         (ind (cffi:mem-ref indp 'oci:sb-2)))
@@ -674,32 +707,7 @@
     ;; truncated [ORA-01406] or that a null occurred on a SELECT or
     ;; PL/SQL FETCH [ORA-01405].  (print (list :@@@ alen ind))
     ;;(print (list :@@@ (typemap-external-type typemap)))
-    (ecase ind
-      (-1 :null)
-      (0 (ecase (typemap-external-type typemap)
-           (#.oci:+sqlt-clob+ (oci-string-to-lisp bufp alen))
-           (#.oci:+sqlt-blob+
-            (let ((v (make-array alen :element-type '(unsigned-byte 8))))
-              (dotimes (i alen v)
-                (setf (aref v i) (cffi:mem-ref bufp :unsigned-char i)))))
-           (#.oci:+sqlt-timestamp+ (decode-datetime bufp))
-           (#.oci:+sqlt-timestamp-tz+ (decode-datetime-tz bufp))
-           (#.oci:+sqlt-str+ (oci-string-to-lisp bufp alen))
-           (#.oci:+sqlt-vnu+ (rational-from-varnum bufp alen))
-           (#.oci:+sqlt-afc+ (boolean-from-char bufp alen))
-           ;;(#.oci:+sqlt-int+ (error "hi1"))
-           ;;(#.oci:+sqlt-bfloat+ (error "hi2"))
-           (#.oci:+sqlt-bdouble+
-            (let ((*read-eval* nil)
-                  (*read-default-float-format* 'double-float))
-              (coerce (read-from-string (oci-string-to-lisp bufp alen)) 'double-float)))
-           (#.oci:+sqlt-dat+
-            (cdate-from-date bufp alen)
-            #+nil
-            (multiple-value-bind (y m d) (decode-date bufp)
-              (make-cdate y m d)))
-           ;;(#.oci:+sqlt-odt+ (error "hi3") (cdate-from-date bufp alen))
-           )))))
+    (%decode-value bufp alen ind typemap)))
 
 (defun fetch-cell (stm tx typemap nbytes
                    bufp alenp indp rcodep
