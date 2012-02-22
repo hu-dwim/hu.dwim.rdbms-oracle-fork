@@ -44,7 +44,12 @@
     :type (or null integer)))
   (:format-sql-syntax-node
    (format-separated-list subqueries
-                          (string+ (symbol-name set-operation) (if all " ALL" "")))
+                          (ecase set-operation
+			    (:union (if all "UNION ALL" "UNION"))
+			    (:except (ecase (backend-type database)
+				       (:postgresql "EXCEPT")
+				       (:oracle "MINUS")))
+			    (:intersection "INTERSECT")))
    (when order-by
      (format-string " ORDER BY ")
      (format-comma-separated-list order-by))
