@@ -507,27 +507,6 @@
              (:constructor make-defin3r (indicators values value-size typemap)))
   indicators values value-size typemap)
 
-(defun fetch-column-value (defin3r index)
-  (with-slots (indicators values value-size typemap) defin3r
-    (%decode-value (cffi:inc-pointer values (* index value-size))
-                   value-size
-                   (cffi:mem-aref indicators :short index)
-                   typemap)))
-
-(defun decode-row (defin3rs result-type)
-  (ecase result-type
-    (list
-     (loop
-        for d across defin3rs
-        collect (fetch-column-value d 0)))
-    (vector
-     (loop
-        with vals = (make-array (length defin3rs))
-        for d across defin3rs
-        for i from 0
-        do (setf (aref vals i) (fetch-column-value d 0))
-        finally (return vals)))))
-
 (defun allocate-oci-date-time (descriptor-ptr-ptr)
   (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp+))
 
@@ -617,7 +596,7 @@
     (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_LENGTH
                    length)))
 
-(defun call-with-defin3r (stm tx pos1 paraminfo fn &aux (nrows 1)) ;; TODO nrows
+(defun call-with-defin3r (tx stm nrows pos1 paraminfo fn)
   (multiple-value-bind (ctype csize precision scale)
       (parse-paraminfo paraminfo)
     (let* ((typemap (typemap-for-internal-type ctype csize
@@ -643,10 +622,10 @@
                 *default-oci-flags*)
               (funcall fn (make-defin3r indicators ptr nbytes1 typemap)))))))))
 
-(defmacro with-defin3r ((var stm tx pos1 paraminfo) &body body)
-  `(call-with-defin3r ,stm ,tx ,pos1 ,paraminfo (lambda (,var) ,@body)))
+(defmacro with-defin3r ((var tx stm nrows pos1 paraminfo) &body body)
+  `(call-with-defin3r ,tx ,stm ,nrows ,pos1 ,paraminfo (lambda (,var) ,@body)))
 
-(defun call-with-defin3rs (stm tx fn)
+(defun call-with-defin3rs (tx stm nrows fn)
   (let ((d (make-array 8 :adjustable t :fill-pointer 0)))
     (cffi:with-foreign-object (paraminfo :pointer)
       (labels ((rec (i)
@@ -657,7 +636,7 @@
                                          paraminfo
                                          (1+ i)))
                      (unwind-protect
-                          (with-defin3r (x stm tx (1+ i)
+                          (with-defin3r (x tx stm nrows (1+ i)
                                            (cffi:mem-ref paraminfo :pointer))
                             (vector-push-extend x d)
                             (rec (1+ i)))
@@ -665,8 +644,8 @@
                      (funcall fn d))))
         (rec 0)))))
 
-(defmacro with-defin3rs ((var stm tx) &body body)
-  `(call-with-defin3rs ,stm ,tx (lambda (,var) ,@body)))
+(defmacro with-defin3rs ((var tx stm nrows) &body body)
+  `(call-with-defin3rs ,tx ,stm ,nrows (lambda (,var) ,@body)))
 
 ;;; prepared statement execution
 
@@ -761,19 +740,58 @@
          ;;(#.oci:+sqlt-odt+ (error "hi3") (cdate-from-date bufp alen))
          ))))
 
-(defun decode-value (bufp nbytes alenp indp typemap) ;; TODO THL s/typemap/external-type
-  (let ((alen (cffi:mem-ref alenp 'oci:ub-4))
-        (ind (cffi:mem-ref indp 'oci:sb-2)))
-    ;;(print (list :@@@ alen))
-    (assert (< alen nbytes))
-    ;; TODO THL assert rcode bellow?  (oci-call (cffi:mem-ref rcodep
-    ;; 'oci:ub-2))
-    ;; http://www.helsinki.fi/~atkk_klp/oradoc/DOC/api/doc/OCI73/ch4a.htm
-    ;; Typical error codes would indicate that data in progv has been
-    ;; truncated [ORA-01406] or that a null occurred on a SELECT or
-    ;; PL/SQL FETCH [ORA-01405].  (print (list :@@@ alen ind))
-    ;;(print (list :@@@ (typemap-external-type typemap)))
-    (%decode-value bufp alen ind typemap)))
+;; (defun decode-value (bufp nbytes alenp indp typemap) ;; TODO THL s/typemap/external-type
+;;   (let ((alen (cffi:mem-ref alenp 'oci:ub-4))
+;;         (ind (cffi:mem-ref indp 'oci:sb-2)))
+;;     ;;(print (list :@@@ alen))
+;;     (assert (< alen nbytes))
+;;     ;; TODO THL assert rcode bellow?  (oci-call (cffi:mem-ref rcodep
+;;     ;; 'oci:ub-2))
+;;     ;; http://www.helsinki.fi/~atkk_klp/oradoc/DOC/api/doc/OCI73/ch4a.htm
+;;     ;; Typical error codes would indicate that data in progv has been
+;;     ;; truncated [ORA-01406] or that a null occurred on a SELECT or
+;;     ;; PL/SQL FETCH [ORA-01405].  (print (list :@@@ alen ind))
+;;     ;;(print (list :@@@ (typemap-external-type typemap)))
+;;     (%decode-value bufp alen ind typemap)))
+
+(defun decode-cell (defin3r r)
+  (with-slots (indicators values value-size typemap) defin3r
+    (%decode-value (cffi:inc-pointer values (* r value-size))
+                   value-size
+                   (cffi:mem-aref indicators :short r)
+                   typemap)))
+
+(defun decode-row (defin3rs r cfn)
+  (loop
+     with z = nil
+     for d across defin3rs
+     do (setq z (funcall cfn (decode-cell d r)))
+     finally (return z)))
+
+(defun fetch-nrows (stm nrows)
+  (when (stmt-fetch-2 stm nrows oci:+fetch-next+ 0)
+    (let ((n (attr-rows-fetched stm)))
+      (assert (<= n nrows))
+      n)))
+
+(defmacro awhile (test &body body)
+  (let ((z (gensym)))
+    `(do (it ,z)
+         ((not (setq it ,test)) ,z)
+       (setq ,z (locally ,@body)))))
+
+(defmacro zdotimes ((i n) &body body)
+  (let ((z (gensym)))
+    `(let (,z)
+       (dotimes (,i ,n ,z)
+         (setq ,z (locally ,@body))))))
+
+(defun fetch-rows (tx stm rfn mkcfn &aux (nrows 1))
+  (with-defin3rs (d tx stm nrows)
+    (when (plusp (length d))
+      (awhile (fetch-nrows stm nrows)
+        (zdotimes (r it)
+          (funcall rfn (decode-row d r (funcall mkcfn))))))))
 
 (defun execute-prepared-statement (tx stm btypes bvalues visitor result-type out-position)
   ;; TODO THL configurable prefetching limits?
@@ -801,17 +819,9 @@
       (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
       (mapc 'cffi:foreign-free *convert-value-alloc*)))
   (values
-   ;; fetch
-   (with-defin3rs (d stm tx)
-     (when (plusp (length d))
-       (loop
-          with z = nil
-          with xvisitor = (make-collector visitor result-type)
-          while (when (stmt-fetch-2 stm 1 oci:+fetch-next+ 0)
-                  (assert (eql 1 (attr-rows-fetched stm)))
-                  t)
-          do (setq z (funcall xvisitor (decode-row d result-type)))
-          finally (return z))))
+   (fetch-rows tx stm
+               (make-collector visitor result-type)
+               (lambda () (make-collector nil result-type)))
    (attr-row-count stm)))
 
 (def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?
