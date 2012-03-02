@@ -505,8 +505,8 @@
 
 ;; use DEFIN3R, DEFINER clashes with hu.dwim.def:-{
 (defstruct (defin3r
-             (:constructor make-defin3r (indicators values value-size typemap)))
-  indicators values value-size typemap)
+             (:constructor make-defin3r (indicators values value-size typemap lobv)))
+  indicators values value-size typemap lobv)
 
 (defun allocate-oci-date-time (descriptor-ptr-ptr)
   (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp+))
@@ -621,7 +621,10 @@
                 null
                 return-codes
                 *default-oci-flags*)
-              (funcall fn (make-defin3r indicators ptr nbytes1 typemap)))))))))
+              (funcall fn (make-defin3r indicators ptr nbytes1 typemap
+                                        (case external-type
+                                          ((112 113)
+                                           (make-array nrows1))))))))))))
 
 (defmacro with-defin3r ((var tx stm nrows1 pos1 paraminfo) &body body)
   `(call-with-defin3r ,tx ,stm ,nrows1 ,pos1 ,paraminfo (lambda (,var) ,@body)))
@@ -710,16 +713,8 @@
   (ecase ind
     (-1 :null)
     (0 (ecase (typemap-external-type typemap)
-         (#.oci:+sqlt-clob+
-          (string-from-clob bufp alen)
-          #+nil
-          (oci-string-to-lisp bufp alen))
-         (#.oci:+sqlt-blob+
-          (byte-array-from-blob bufp alen)
-          #+nil
-          (let ((v (make-array alen :element-type '(unsigned-byte 8))))
-            (dotimes (i alen v)
-              (setf (aref v i) (cffi:mem-ref bufp :unsigned-char i)))))
+         (#.oci:+sqlt-clob+ (string-from-clob bufp alen))
+         (#.oci:+sqlt-blob+ (byte-array-from-blob bufp alen))
          (#.oci:+sqlt-timestamp+ (local-time-from-timestamp bufp alen) #+nil(decode-datetime bufp))
          (#.oci:+sqlt-timestamp-tz+ (local-time-from-timestamp-tz bufp alen) #+nil(decode-datetime-tz bufp))
          (#.oci:+sqlt-str+ (oci-string-to-lisp bufp alen))
@@ -770,15 +765,31 @@
          (setq ,z (locally ,@body))))))
 
 (defun decode-cell (defin3r r)
-  (with-slots (indicators values value-size typemap) defin3r
-    (%decode-value (cffi:inc-pointer values (* r value-size))
-                   value-size
-                   (cffi:mem-aref indicators :short r)
-                   typemap)))
+  (with-slots (indicators values value-size typemap lobv) defin3r
+    (if lobv
+        (aref lobv r)
+        (%decode-value (cffi:inc-pointer values (* r value-size))
+                       value-size
+                       (cffi:mem-aref indicators :short r)
+                       typemap))))
 
 (defun decode-row (defin3rs r cfn)
   (zacross (d defin3rs)
     (funcall cfn (decode-cell d r))))
+
+(defun download-lobs-into (nrows indicators values value-size typemap lobv)
+  (dotimes (r nrows)
+    (setf (aref lobv r)
+          (%decode-value (cffi:inc-pointer values (* r value-size))
+                         value-size
+                         (cffi:mem-aref indicators :short r)
+                         typemap))))
+
+(defun ensure-lobs-downloaded (defin3rs nrows)
+  (zacross (d defin3rs)
+    (with-slots (indicators values value-size typemap lobv) d
+      (when lobv
+        (download-lobs-into nrows indicators values value-size typemap lobv)))))
 
 (defun fetch-rows (tx stm rfn mkcfn &aux (nrows1 42))
   (with-defin3rs (d tx stm nrows1)
@@ -790,6 +801,7 @@
                   (when (plusp n)
                     (assert (<= n nrows1))
                     (incf nrows n)
+                    (ensure-lobs-downloaded d n)
                     (setq z (zdotimes (r n)
                               (funcall rfn (decode-row d r (funcall mkcfn)))))
                     more)))
