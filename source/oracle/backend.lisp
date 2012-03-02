@@ -223,6 +223,7 @@
           (unless (cffi:null-pointer-p (session-handle-of transaction))
             (oci-call (oci:handle-free (session-handle-of transaction) oci:+htype-session+))
             (setf (session-handle-of transaction) null)))
+    ;;(set-default-lob-prefetching #.(* 1024 1024))
     (when schema
       (setf (session-schema transaction) schema)
       (execute-command (database-of transaction)
@@ -535,25 +536,25 @@
     (188 #+nil :local-time/timestamp-tz 'free-oci-date-time-tz)
     (113 #+nil :byte-array/blob 'free-oci-lob-locator)))
 
-(defun call-with-defin3r-buffer (nrows nbytes1 typemap fn)
-  (let ((nbytes (* nrows nbytes1)))
+(defun call-with-defin3r-buffer (nrows1 nbytes1 typemap fn)
+  (let ((nbytes (* nrows1 nbytes1)))
     (cffi:with-foreign-object (ptr :uint8 nbytes)
       (dotimes (i nbytes)
         (setf (cffi:mem-ref ptr :uint8 i) 0))
       (let ((constructor (typemap-allocate-instance typemap)))
         (when constructor
           (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
-          (dotimes (i nrows)
+          (dotimes (i nrows1)
             (funcall constructor (cffi:inc-pointer ptr (* nbytes1 i))))))
       (unwind-protect (funcall fn ptr nbytes)
         (let ((destructor (typemap-free-instance typemap)))
           (when destructor
             (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
-            (dotimes (i nrows)
+            (dotimes (i nrows1)
               (funcall destructor (cffi:mem-ref ptr :pointer i)))))))))
 
-(defmacro with-defin3r-buffer ((ptr nbytes nrows nbytes1 typemap) &body body)
-  `(call-with-defin3r-buffer ,nrows ,nbytes1 ,typemap
+(defmacro with-defin3r-buffer ((ptr nbytes nrows1 nbytes1 typemap) &body body)
+  `(call-with-defin3r-buffer ,nrows1 ,nbytes1 ,typemap
                              (lambda (,ptr ,nbytes) ,@body)))
 
 (defun parse-paraminfo (paraminfo)
@@ -596,7 +597,7 @@
     (set-attribute defin3r-handle oci:+htype-define+ OCI_ATTR_LOBPREFETCH_LENGTH
                    length)))
 
-(defun call-with-defin3r (tx stm nrows pos1 paraminfo fn)
+(defun call-with-defin3r (tx stm nrows1 pos1 paraminfo fn)
   (multiple-value-bind (ctype csize precision scale)
       (parse-paraminfo paraminfo)
     (let* ((typemap (typemap-for-internal-type ctype csize
@@ -604,9 +605,9 @@
                                                :scale scale))
            (external-type (typemap-external-type typemap))
            (nbytes1 (data-size-for external-type csize)))
-      (cffi:with-foreign-object (return-codes :unsigned-short nrows)
-        (cffi:with-foreign-object (indicators :short nrows)
-          (with-defin3r-buffer (ptr nbytes nrows nbytes1 typemap)
+      (cffi:with-foreign-object (return-codes :unsigned-short nrows1)
+        (cffi:with-foreign-object (indicators :short nrows1)
+          (with-defin3r-buffer (ptr nbytes nrows1 nbytes1 typemap)
             (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
               (oci:define-by-pos
                   (statement-handle-of stm)
@@ -614,7 +615,7 @@
                 (error-handle-of tx)
                 pos1
                 ptr
-                nbytes
+                nbytes1
                 external-type
                 indicators
                 null
@@ -622,10 +623,10 @@
                 *default-oci-flags*)
               (funcall fn (make-defin3r indicators ptr nbytes1 typemap)))))))))
 
-(defmacro with-defin3r ((var tx stm nrows pos1 paraminfo) &body body)
-  `(call-with-defin3r ,tx ,stm ,nrows ,pos1 ,paraminfo (lambda (,var) ,@body)))
+(defmacro with-defin3r ((var tx stm nrows1 pos1 paraminfo) &body body)
+  `(call-with-defin3r ,tx ,stm ,nrows1 ,pos1 ,paraminfo (lambda (,var) ,@body)))
 
-(defun call-with-defin3rs (tx stm nrows fn)
+(defun call-with-defin3rs (tx stm nrows1 fn)
   (let ((d (make-array 8 :adjustable t :fill-pointer 0)))
     (cffi:with-foreign-object (paraminfo :pointer)
       (labels ((rec (i)
@@ -636,7 +637,7 @@
                                          paraminfo
                                          (1+ i)))
                      (unwind-protect
-                          (with-defin3r (x tx stm nrows (1+ i)
+                          (with-defin3r (x tx stm nrows1 (1+ i)
                                            (cffi:mem-ref paraminfo :pointer))
                             (vector-push-extend x d)
                             (rec (1+ i)))
@@ -644,8 +645,8 @@
                      (funcall fn d))))
         (rec 0)))))
 
-(defmacro with-defin3rs ((var tx stm nrows) &body body)
-  `(call-with-defin3rs ,tx ,stm ,nrows (lambda (,var) ,@body)))
+(defmacro with-defin3rs ((var tx stm nrows1) &body body)
+  `(call-with-defin3rs ,tx ,stm ,nrows1 (lambda (,var) ,@body)))
 
 ;;; prepared statement execution
 
@@ -754,6 +755,20 @@
 ;;     ;;(print (list :@@@ (typemap-external-type typemap)))
 ;;     (%decode-value bufp alen ind typemap)))
 
+(defmacro zacross ((e vec) &body body)
+  (let ((z (gensym)))
+    `(loop
+        with ,z = nil
+        for ,e across ,vec
+        do (setq ,z (locally ,@body))
+        finally (return ,z))))
+
+(defmacro zdotimes ((i n) &body body)
+  (let ((z (gensym)))
+    `(let (,z)
+       (dotimes (,i ,n ,z)
+         (setq ,z (locally ,@body))))))
+
 (defun decode-cell (defin3r r)
   (with-slots (indicators values value-size typemap) defin3r
     (%decode-value (cffi:inc-pointer values (* r value-size))
@@ -762,40 +777,29 @@
                    typemap)))
 
 (defun decode-row (defin3rs r cfn)
-  (loop
-     with z = nil
-     for d across defin3rs
-     do (setq z (funcall cfn (decode-cell d r)))
-     finally (return z)))
+  (zacross (d defin3rs)
+    (funcall cfn (decode-cell d r))))
 
-(defun fetch-nrows (stm nrows)
-  (when (stmt-fetch-2 stm nrows oci:+fetch-next+ 0)
-    (let ((n (attr-rows-fetched stm)))
-      (assert (<= n nrows))
-      n)))
-
-(defmacro awhile (test &body body)
-  (let ((z (gensym)))
-    `(do (it ,z)
-         ((not (setq it ,test)) ,z)
-       (setq ,z (locally ,@body)))))
-
-(defmacro zdotimes ((i n) &body body)
-  (let ((z (gensym)))
-    `(let (,z)
-       (dotimes (,i ,n ,z)
-         (setq ,z (locally ,@body))))))
-
-(defun fetch-rows (tx stm rfn mkcfn &aux (nrows 1))
-  (with-defin3rs (d tx stm nrows)
+(defun fetch-rows (tx stm rfn mkcfn &aux (nrows1 42))
+  (with-defin3rs (d tx stm nrows1)
     (when (plusp (length d))
-      (awhile (fetch-nrows stm nrows)
-        (zdotimes (r it)
-          (funcall rfn (decode-row d r (funcall mkcfn))))))))
+      (do (z
+           (nrows 0))
+          ((not (let ((more (stmt-fetch-2 stm nrows1 oci:+fetch-next+ 0))
+                      (n (attr-rows-fetched stm)))
+                  (when (plusp n)
+                    (assert (<= n nrows1))
+                    (incf nrows n)
+                    (setq z (zdotimes (r n)
+                              (funcall rfn (decode-row d r (funcall mkcfn)))))
+                    more)))
+           (progn
+             (assert (eql nrows (attr-row-count stm)))
+             (values z nrows)))))))
 
 (defun execute-prepared-statement (tx stm btypes bvalues visitor result-type out-position)
   ;; TODO THL configurable prefetching limits?
-  (set-row-prefetching stm 1000000 #.(* 10 (expt 2 20)))
+  ;;(set-row-prefetching stm 1000000 #.(* 10 (expt 2 20)))
   ;; execute
   (let* ((nbatch (when bvalues
                    (let ((u (remove-duplicates
@@ -818,11 +822,9 @@
            (stmt-execute stm *default-oci-flags* nbatch))
       (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
       (mapc 'cffi:foreign-free *convert-value-alloc*)))
-  (values
-   (fetch-rows tx stm
-               (make-collector visitor result-type)
-               (lambda () (make-collector nil result-type)))
-   (attr-row-count stm)))
+  (fetch-rows tx stm
+              (make-collector visitor result-type)
+              (lambda () (make-collector nil result-type))))
 
 (def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?
 
