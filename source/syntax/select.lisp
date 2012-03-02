@@ -163,8 +163,23 @@
      (format-string " AS ")
      (format-sql-identifier alias))))
 
+(defun format-column-reference (x db)
+  (typecase x
+    (sql-column-alias
+      (with-slots (table column alias) x
+	(cond
+	  (alias
+	   (format-sql-identifier alias db))
+	  (t
+	   (when table
+	     (format-sql-identifier table db)
+	     (format-char "."))
+	   (format-sql-identifier column db)))))
+    (t
+     (format-sql-syntax-node x db))))
+
 (def type sql-column-alias* ()
-  '(or string symbol sql-column-alias))
+  '(or string symbol sql-column-alias sql-function-call))
 
 (def syntax-node sql-all-columns (sql-identifier)
   ()
@@ -185,7 +200,7 @@
     :ascending
     :type (member :ascending :descending)))
   (:format-sql-syntax-node
-   (format-sql-syntax-node sort-key)
+   (format-column-reference sort-key database)
    (format-char " ")
    (ecase ordering
      (:ascending (format-string "ASC"))

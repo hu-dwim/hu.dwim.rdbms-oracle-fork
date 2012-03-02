@@ -24,6 +24,54 @@
 ;;;;;;
 ;;; Set operations
 
+(defun find-column-alias (query table-name column-name)
+  (find-if (lambda (column-alias)
+	     (and (equal (table-of column-alias) table-name)
+		  (equal (column-of column-alias) column-name)))
+	   (columns-of query)))
+
+(defun consistent-order-by (queries order-bys)
+  (destructuring-bind (&optional len &rest extra)
+      (remove-duplicates (mapcar #'length order-bys))
+    (when (and len (plusp len) (not extra))
+      ;; order-bys specified, and they have a consistent, non-zero
+      ;; number of columns
+      (apply #'mapcar
+	     (lambda (&rest sort-specs)
+	       (let* ((sort-keys (mapcar #'sort-key-of sort-specs))
+		      (1st (car sort-specs))
+		      (ordering (ordering-of 1st))
+		      (columns (mapcar
+				(lambda (q key)
+				  (or (find-column-alias q (table-of key) (column-of key))
+				      (error "ORDER BY does not refer to an output column: ~A" key)))
+				queries
+				sort-keys))
+		      ;; use a name currently specified, or make a new one
+		      (name (or (some #'alias-of sort-keys)
+				(some #'alias-of columns)
+				(gensym))))
+		 (iter (for spec in sort-specs)
+		       (for key in sort-keys)
+		       (for col in columns)
+		       (unless (eq ordering (ordering-of spec))
+			 (error "inconsistent ordering in ORDER BY specs for ~A"
+				key))
+		       ;;
+		       ;; We need (named) column aliases for sorting.
+		       ;;
+		       (dolist (updateme (list key col))
+			 (let ((this-name (alias-of updateme)))
+			   (cond
+			     ((null this-name)
+			      (setf (alias-of updateme) name))
+			     ((equal name this-name))
+			     (t
+			      (error "inconsistent column aliases in ORDER BY specs for ~A"
+				     key))))))
+		 1st))
+	     order-bys))))
+
 (def syntax-node sql-set-operation-expression (sql-query-expression)
   ((set-operation
     :type (member :union :except :intersect))
@@ -43,16 +91,50 @@
     nil
     :type (or null integer)))
   (:format-sql-syntax-node
-   (format-separated-list subqueries
-                          (ecase set-operation
-			    (:union (if all "UNION ALL" "UNION"))
-			    (:except (ecase (backend-type database)
-				       (:postgresql "EXCEPT")
-				       (:oracle "MINUS")))
-			    (:intersection "INTERSECT")))
-   (when order-by
-     (format-string " ORDER BY ")
-     (format-comma-separated-list order-by))
+   (let ((actual-subqueries (mapcar (lambda (x)
+				      (etypecase x
+					(sql-select x)
+					(sql-subquery (query-of x))))
+				    subqueries)))
+
+     ;; Kludge or Feature?
+     ;;
+     ;; Ordinarily, the ordering of set operations is not well-defined without
+     ;; an explicit ORDER BY clauses.  We deviate from this SQL behaviour by
+     ;; checking the subqueries for ORDER BY.  If the subqueries have ORDER BY
+     ;; clauses that look like they make sense, we move them out to guarantee
+     ;; the same ordering for the full set.
+     (let* ((subquery-order-bys (mapcar #'order-by-of actual-subqueries))
+	    (outer-order-by
+	     (or order-by
+		 (consistent-order-by actual-subqueries subquery-order-bys))))
+       (ecase (backend-type database)
+	 (:postgresql)
+	 (:oracle
+	  ;; Also, oracle doesn't support ORDER BYs in the subqueries
+	  ;; (presumably because those would be pointless), so we strip
+	  ;; them.
+	  ;;
+	  (dolist (sub actual-subqueries)
+	    (setf (order-by-of sub) nil))))
+       
+       (format-separated-list (ecase (backend-type database)
+				(:postgresql subqueries)
+				(:oracle
+				 ;; So ORACLE doesn't like the parens in
+				 ;;   (SELECT ...) UNION (SELECT ...)
+				 ;; written by SQL-SUBQUERYs.  Strip them:
+				 actual-subqueries))
+			      (ecase set-operation
+				(:union (if all "UNION ALL" "UNION"))
+				(:except (ecase (backend-type database)
+					   (:postgresql "EXCEPT")
+					   (:oracle "MINUS")))
+				(:intersection "INTERSECT")))
+
+       (when outer-order-by
+	 (format-string " ORDER BY ")
+	 (format-comma-separated-list outer-order-by))))
    (when limit
      (format-string " LIMIT ")
      (format-sql-syntax-node limit))
