@@ -426,8 +426,9 @@
 
 (defmacro with-initialized-foreign-array ((var type length value) &body body)
   `(cffi:with-foreign-object (,var ,type ,length)
-     (dotimes (i ,length)
-       (setf (cffi:mem-ref ,var ,type i) ,value))
+     (let ((size (cffi:foreign-type-size ,type)))
+       (dotimes (i ,length)
+         (setf (cffi:mem-ref ,var ,type (* size i)) ,value)))
      ,@body))
 
 #-allegro
