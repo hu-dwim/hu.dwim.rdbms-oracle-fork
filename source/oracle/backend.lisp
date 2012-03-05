@@ -523,18 +523,18 @@
 (defun typemap-allocate-instance (typemap)
   (case (typemap-external-type typemap)
     (112 #+nil :string/clob 'allocate-oci-lob-locator)
+    (113 #+nil :byte-array/blob 'allocate-oci-lob-locator)
     (187 #+nil :local-time/time 'allocate-oci-date-time)
     ;;(:local-time/timestamp 'allocate-oci-date-time) ;; same as above
-    (188 #+nil :local-time/timestamp-tz 'allocate-oci-date-time-tz)
-    (113 #+nil :byte-array/blob 'allocate-oci-lob-locator)))
+    (188 #+nil :local-time/timestamp-tz 'allocate-oci-date-time-tz)))
 
 (defun typemap-free-instance (typemap)
   (case (typemap-external-type typemap)
     (112 #+nil :string/clob 'free-oci-lob-locator)
+    (113 #+nil :byte-array/blob 'free-oci-lob-locator)
     (187 #+nil :local-time/time 'free-oci-date-time)
     ;;(:local-time/timestamp 'free-oci-date-time) ;; same as above
-    (188 #+nil :local-time/timestamp-tz 'free-oci-date-time-tz)
-    (113 #+nil :byte-array/blob 'free-oci-lob-locator)))
+    (188 #+nil :local-time/timestamp-tz 'free-oci-date-time-tz)))
 
 (defun typemap-allocate-instances (typemap ptr nbytes1 nrows1)
   (let ((constructor (typemap-allocate-instance typemap)))
