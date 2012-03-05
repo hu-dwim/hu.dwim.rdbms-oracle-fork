@@ -424,6 +424,12 @@
      (setf (cffi:mem-ref ,var ,type) ,value)
      ,@body))
 
+(defmacro with-initialized-foreign-array ((var type length value) &body body)
+  `(cffi:with-foreign-object (,var ,type ,length)
+     (dotimes (i ,length)
+       (setf (cffi:mem-ref ,var ,type i) ,value))
+     ,@body))
+
 #-allegro
 (defparameter *download-lob-buffer* nil)
 

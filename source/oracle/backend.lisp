@@ -536,22 +536,26 @@
     (188 #+nil :local-time/timestamp-tz 'free-oci-date-time-tz)
     (113 #+nil :byte-array/blob 'free-oci-lob-locator)))
 
+(defun typemap-allocate-instances (typemap ptr nbytes1 nrows1)
+  (let ((constructor (typemap-allocate-instance typemap)))
+    (when constructor
+      (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
+      (dotimes (i nrows1)
+        (funcall constructor (cffi:inc-pointer ptr (* nbytes1 i)))))))
+
+(defun typemap-free-instances (typemap ptr nbytes1 nrows1)
+  (let ((destructor (typemap-free-instance typemap)))
+    (when destructor
+      (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
+      (dotimes (i nrows1)
+        (funcall destructor (cffi:mem-ref ptr :pointer i))))))
+
 (defun call-with-defin3r-buffer (nrows1 nbytes1 typemap fn)
   (let ((nbytes (* nrows1 nbytes1)))
-    (cffi:with-foreign-object (ptr :uint8 nbytes)
-      (dotimes (i nbytes)
-        (setf (cffi:mem-ref ptr :uint8 i) 0))
-      (let ((constructor (typemap-allocate-instance typemap)))
-        (when constructor
-          (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
-          (dotimes (i nrows1)
-            (funcall constructor (cffi:inc-pointer ptr (* nbytes1 i))))))
+    (with-initialized-foreign-array (ptr :uint8 nbytes 0)
+      (typemap-allocate-instances typemap ptr nbytes1 nrows1)
       (unwind-protect (funcall fn ptr nbytes)
-        (let ((destructor (typemap-free-instance typemap)))
-          (when destructor
-            (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
-            (dotimes (i nrows1)
-              (funcall destructor (cffi:mem-ref ptr :pointer i)))))))))
+        (typemap-free-instances typemap ptr nbytes1 nrows1)))))
 
 (defmacro with-defin3r-buffer ((ptr nbytes nrows1 nbytes1 typemap) &body body)
   `(call-with-defin3r-buffer ,nrows1 ,nbytes1 ,typemap
