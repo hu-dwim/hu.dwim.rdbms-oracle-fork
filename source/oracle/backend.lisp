@@ -811,7 +811,7 @@
                     more)))
            (progn
              (assert (eql nrows (attr-row-count stm)))
-             (values z nrows)))))))
+             z))))))
 
 (defun execute-prepared-statement (tx stm btypes bvalues visitor result-type out-position)
   ;; TODO THL configurable prefetching limits?
@@ -838,9 +838,11 @@
            (stmt-execute stm *default-oci-flags* nbatch))
       (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
       (mapc 'cffi:foreign-free *convert-value-alloc*)))
-  (fetch-rows tx stm
-              (make-collector visitor result-type)
-              (lambda () (make-collector nil result-type))))
+  (values
+   (fetch-rows tx stm
+               (make-collector visitor result-type)
+               (lambda () (make-collector nil result-type)))
+   (attr-row-count stm)))
 
 (def method backend-release-savepoint (name (db oracle))) ;; TODO THL nothing needed?
 
