@@ -290,14 +290,12 @@
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh) hh
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-mi) mm
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-ss) ss)
-      (values
-       oci-date
-       (cffi:foreign-type-size 'oci:date)))))
+      (values oci-date #.(cffi:foreign-type-size 'oci:date)))))
 
 (def function local-time-from-oci-date (ptr len)
   ;; FIXME using fields of the opaque OCIDate structure, because the OCIDateGetDate and
   ;;       OCIDateGetTime macros are not available
-  (assert (= len (cffi:foreign-type-size 'oci:date)))
+  (assert (= #.(cffi:foreign-type-size 'oci:date) len))
   (let* ((year (cffi:foreign-slot-value ptr 'oci:date 'oci::date-yyyy))
          (month (cffi:foreign-slot-value ptr 'oci:date 'oci::date-mm))
          (day (cffi:foreign-slot-value ptr 'oci:date 'oci::date-dd))
@@ -339,9 +337,7 @@
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh) 0
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-mi) 0
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-ss) 0)
-      (values
-       oci-date
-       (cffi:foreign-type-size 'oci:date)))))
+      (values oci-date #.(cffi:foreign-type-size 'oci:date)))))
 
 (def function cdate-from-date (ptr len)
   (assert (= len 7))
@@ -364,7 +360,7 @@
 (def function cdate-from-oci-date (ptr len)
   ;; FIXME using fields of the opaque OCIDate structure, because the OCIDateGetDate and
   ;;       OCIDateGetTime macros are not available
-  (assert (= len (cffi:foreign-type-size 'oci:date)))
+  (assert (= #.(cffi:foreign-type-size 'oci:date) len))
   (let* ((year (cffi:foreign-slot-value ptr 'oci:date 'oci::date-yyyy))
          (month (cffi:foreign-slot-value ptr 'oci:date 'oci::date-mm))
          (day (cffi:foreign-slot-value ptr 'oci:date 'oci::date-dd))
@@ -407,11 +403,10 @@
                                          nsec
                                          (cffi:null-pointer)
                                          0)))
-    (values oci-date-time-pointer
-            (cffi:foreign-type-size :pointer))))
+    (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer))))
 
 (def function local-time-from-timestamp (ptr len)
-  (assert (= len (cffi:foreign-type-size :pointer)))
+  (assert (= #.(cffi:foreign-type-size :pointer) len))
   (let ((environment-handle (environment-handle-of *transaction*))
         (error-handle (error-handle-of *transaction*)))
     (cffi:with-foreign-objects ((year 'oci:sb-2)
@@ -471,9 +466,7 @@
                                            nsec
                                            c-timezone-ptr
                                            c-timezone-size))))
-    (values
-     oci-date-time-pointer
-     (cffi:foreign-type-size :pointer))))
+    (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer))))
 
 (def function local-time-from-timestamp-tz (ptr len)
   (declare (ignore len))

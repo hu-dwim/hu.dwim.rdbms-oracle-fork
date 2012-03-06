@@ -193,9 +193,9 @@
     (#.oci:+sqlt-str+ (* (oci-char-width) (1+ column-size)))
     #+nil(#.oci:+sqlt-lvc+ (min (+ column-size 4) 8000)) ; FIXME
     (#.oci:+sqlt-dat+ 7)
-    (#.oci:+sqlt-odt+ (cffi:foreign-type-size 'oci:date))
-    (#.oci:+sqlt-timestamp+ (cffi:foreign-type-size :pointer))
-    (#.oci:+sqlt-timestamp-tz+ (cffi:foreign-type-size :pointer))
-    (#.oci:+sqlt-clob+ (cffi:foreign-type-size :pointer))
-    (#.oci:+sqlt-blob+ (cffi:foreign-type-size :pointer))
+    (#.oci:+sqlt-odt+ #.(cffi:foreign-type-size 'oci:date))
+    (#.oci:+sqlt-timestamp+ #.(cffi:foreign-type-size :pointer))
+    (#.oci:+sqlt-timestamp-tz+ #.(cffi:foreign-type-size :pointer))
+    (#.oci:+sqlt-clob+ #.(cffi:foreign-type-size :pointer))
+    (#.oci:+sqlt-blob+ #.(cffi:foreign-type-size :pointer))
     #+nil(#.oci:+sqlt-lvb+ (min (+ column-size 4) 8000)))) ; FIXME

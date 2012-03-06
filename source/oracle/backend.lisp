@@ -539,14 +539,14 @@
 (defun typemap-allocate-instances (typemap ptr nbytes1 nrows1)
   (let ((constructor (typemap-allocate-instance typemap)))
     (when constructor
-      (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
+      (assert (eql #.(cffi:foreign-type-size :pointer) nbytes1))
       (dotimes (i nrows1)
         (funcall constructor (cffi:inc-pointer ptr (* nbytes1 i)))))))
 
 (defun typemap-free-instances (typemap ptr nbytes1 nrows1)
   (let ((destructor (typemap-free-instance typemap)))
     (when destructor
-      (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
+      (assert (eql #.(cffi:foreign-type-size :pointer) nbytes1))
       (dotimes (i nrows1)
         (funcall destructor (cffi:mem-aref ptr :pointer i))))))
 
@@ -844,7 +844,7 @@
       (zacross (d defin3rs)
         (with-slots (indicators values value-size typemap lobv) d
           (when lobv
-            (assert (eql value-size #.(cffi:foreign-type-size :pointer)))
+            (assert (eql #.(cffi:foreign-type-size :pointer) value-size))
             (dotimes (r nrows)
               (let ((locator (cffi:mem-aref values :pointer r))
                     (indicator (cffi:mem-aref indicators :short r)))
