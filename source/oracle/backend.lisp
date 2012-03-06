@@ -785,8 +785,10 @@
 (defvar *download-lobs-buffer*)
 (defvar *pending-lobs*)
 
-(defun %download-lobs-cb (ctxp array-iter bufxp len piece changed-bufpp changed-lenp)
+(defun %download-lobs-cb (ctxp array-iter bufxp len #+allegro len-hi piece changed-bufpp changed-lenp)
   (declare (ignore ctxp array-iter changed-bufpp changed-lenp))
+  #+allegro
+  (setq len (+ (ash len-hi 32) len))
   (flet ((move ()
            (dotimes (i len)
              (vector-push-extend (cffi:mem-aref bufxp 'oci:ub-1 i)
@@ -803,11 +805,16 @@
 (cffi:defcallback download-lobs-cb oci:sb-4 ((ctxp :pointer)
                                              (array-iter oci:ub-4)
                                              (bufxp :pointer)
+                                             #-allegro
                                              (len oci:oraub-8)
+                                             #+allegro
+                                             (len oci:ub-4)
+                                             #+allegro
+                                             (len-hi oci:ub-4)
                                              (piece oci:ub-1)
                                              (changed-bufpp :pointer)
                                              (changed-lenp :pointer))
-  (%download-lobs-cb ctxp array-iter bufxp len piece changed-bufpp changed-lenp))
+  (%download-lobs-cb ctxp array-iter bufxp len #+allegro len-hi piece changed-bufpp changed-lenp))
 
 (defun download-lobs-using-callback (locators n &optional csid)
   (let* ((svchp (service-context-handle-of *transaction*))

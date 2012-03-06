@@ -425,10 +425,24 @@
      ,@body))
 
 (defmacro with-initialized-foreign-array ((var type length value) &body body)
-  `(cffi:with-foreign-object (,var ,type ,length)
-     (dotimes (i ,length)
-       (setf (cffi:mem-aref ,var ,type i) ,value))
-     ,@body))
+  (let ((k (gensym))
+        (n (gensym))
+        (v (gensym)))
+    `(let ((,k ,type)
+           (,n ,length)
+           (,v ,value))
+       (cffi:with-foreign-object (,var ,k ,n)
+         #+allegro
+         (if (eq 'oci:oraub-8 ,k)
+             (dotimes (i ,n)
+               (setf (cffi:mem-aref ,var 'oci:ub-4 (* 2 i)) (logand #xffffffff ,v)
+                     (cffi:mem-aref ,var 'oci:ub-4 (1+ (* 2 i))) (ash ,v -32)))
+             (dotimes (i ,n)
+               (setf (cffi:mem-aref ,var ,k i) ,v)))
+         #-allegro
+         (dotimes (i ,n)
+           (setf (cffi:mem-aref ,var ,k i) ,v))
+         ,@body))))
 
 #-allegro
 (defparameter *download-lob-buffer* nil)
