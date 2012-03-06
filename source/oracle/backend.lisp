@@ -12,7 +12,7 @@
 
 (cffi:define-foreign-library oracle-oci
   (:windows (:or "ocixe.dll" "oci.dll"))
-  (t (:default #-x86-64 "libocixe" #+x86-64 "libclntsh"))) ;; TODO THL dont use libocixe?
+  (t (:default "libclntsh")))
 
 (def special-variable *oracle-oci-foreign-library* nil)
 
