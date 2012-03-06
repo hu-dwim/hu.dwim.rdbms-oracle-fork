@@ -836,7 +836,7 @@
 (defun download-lobs-using-callback (locators n &optional csid)
   (let* ((svchp (service-context-handle-of *transaction*))
          (errhp (error-handle-of *transaction*))
-         (siz (* 8 (lob-chunk-size svchp errhp (cffi:mem-aref locators :pointer))))
+         (siz #.(* 8 8 1024 #+nil(lob-chunk-size svchp errhp (cffi:mem-aref locators :pointer))))
          (*download-lobs-buffer* (make-array siz
                                              :element-type '(unsigned-byte 8)
                                              :adjustable t
