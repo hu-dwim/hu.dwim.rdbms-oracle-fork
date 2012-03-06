@@ -769,8 +769,25 @@
        (dotimes (,i ,n ,z)
          (setq ,z (locally ,@body))))))
 
+;; http://lambda-the-ultimate.org/node/1997#comment-24650
+(defmacro with-struct ((conc-name &rest names) obj &body body)
+  "Like with-slots but works only for structs."
+  (flet ((reader (slot) (intern (concatenate 'string
+					     (symbol-name conc-name)
+					     (symbol-name slot))
+				(symbol-package conc-name))))
+    (let ((tmp (gensym "OO-")))
+      ` (let ((,tmp ,obj))
+          (symbol-macrolet
+              ,(loop for name in names collect
+                    (typecase name
+                      (symbol `(,name (,(reader name) ,tmp)))
+                      (cons `(,(first name) (,(reader (second name)) ,tmp)))
+                      (t (error "Malformed syntax in WITH-STRUCT: ~A" name))))
+            ,@body)))))
+
 (defun decode-cell (defin3r r)
-  (with-slots (indicators values value-size typemap lobv) defin3r
+  (with-struct (defin3r- indicators values value-size typemap lobv) defin3r
     (if lobv
         (aref lobv r)
         (%decode-value (cffi:inc-pointer values (* r value-size))
@@ -842,7 +859,7 @@
   (with-list-appender
     (let ((n 0))
       (zacross (d defin3rs)
-        (with-slots (indicators values value-size typemap lobv) d
+        (with-struct (defin3r- indicators values value-size typemap lobv) d
           (when lobv
             (assert (eql #.(cffi:foreign-type-size :pointer) value-size))
             (dotimes (r nrows)
