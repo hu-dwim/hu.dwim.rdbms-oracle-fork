@@ -885,7 +885,7 @@
         (when *pending-lobs*
           (cffi:with-foreign-object (bufp :pointer n)
             (loop
-               for (locator . fn) in *pending-lobs*
+               for (locator) in *pending-lobs*
                for i from 0
                do (setf (cffi:mem-aref bufp :pointer i) locator))
             (download-lobs-using-callback bufp n oci:+utf-16-id+)))))))
