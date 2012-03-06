@@ -548,7 +548,7 @@
     (when destructor
       (assert (eql nbytes1 (cffi:foreign-type-size :pointer)))
       (dotimes (i nrows1)
-        (funcall destructor (cffi:mem-ref ptr :pointer (* nbytes1 i)))))))
+        (funcall destructor (cffi:mem-aref ptr :pointer i))))))
 
 (defun call-with-defin3r-buffer (nrows1 nbytes1 typemap fn)
   (let ((nbytes (* nrows1 nbytes1)))
