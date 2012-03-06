@@ -331,9 +331,9 @@
   (multiple-value-bind (y m d) (decode-cdate cdate)
     (bind ((oci-date (cffi:foreign-alloc 'oci:date))
            (oci-time (cffi:foreign-slot-pointer oci-date 'oci:date 'oci::date-time)))
-      (setf (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-yyyy) year
-            (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-mm) month
-            (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-dd) day
+      (setf (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-yyyy) y
+            (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-mm) m
+            (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-dd) d
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-hh) 0
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-mi) 0
             (cffi:foreign-slot-value oci-time 'oci:time 'oci::time-ss) 0)
