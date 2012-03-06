@@ -612,6 +612,7 @@
       (cffi:with-foreign-object (return-codes :unsigned-short nrows1)
         (cffi:with-foreign-object (indicators :short nrows1)
           (with-defin3r-buffer (ptr nbytes nrows1 nbytes1 typemap)
+            (declare (ignore nbytes))
             (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
               (oci:define-by-pos
                   (statement-handle-of stm)
@@ -781,19 +782,89 @@
   (zacross (d defin3rs)
     (funcall cfn (decode-cell d r))))
 
-(defun download-lobs-into (nrows indicators values value-size typemap lobv)
-  (dotimes (r nrows)
-    (setf (aref lobv r)
-          (%decode-value (cffi:inc-pointer values (* r value-size))
-                         value-size
-                         (cffi:mem-aref indicators :short r)
-                         typemap))))
+(defvar *download-lobs-buffer*)
+(defvar *pending-lobs*)
+
+(defun %download-lobs-cb (ctxp array-iter bufxp len piece changed-bufpp changed-lenp)
+  (declare (ignore ctxp array-iter changed-bufpp changed-lenp))
+  (flet ((move ()
+           (dotimes (i len)
+             (vector-push-extend (cffi:mem-aref bufxp 'oci:ub-1 i)
+                                 *download-lobs-buffer*))))
+    (ecase piece
+      ((#.oci:+first-piece+ #.oci:+next-piece+)
+       (move))
+      (#.oci:+last-piece+
+       (move)
+       (funcall (cdr (pop *pending-lobs*)) *download-lobs-buffer*)
+       (setf (fill-pointer *download-lobs-buffer*) 0))))
+  oci:+continue+)
+
+(cffi:defcallback download-lobs-cb oci:sb-4 ((ctxp :pointer)
+                                             (array-iter oci:ub-4)
+                                             (bufxp :pointer)
+                                             (len oci:oraub-8)
+                                             (piece oci:ub-1)
+                                             (changed-bufpp :pointer)
+                                             (changed-lenp :pointer))
+  (%download-lobs-cb ctxp array-iter bufxp len piece changed-bufpp changed-lenp))
+
+(defun download-lobs-using-callback (locators n &optional csid)
+  (let* ((svchp (service-context-handle-of *transaction*))
+         (errhp (error-handle-of *transaction*))
+         (siz (* 8 (lob-chunk-size svchp errhp (cffi:mem-aref locators :pointer))))
+         (*download-lobs-buffer* (make-array siz
+                                             :element-type '(unsigned-byte 8)
+                                             :adjustable t
+                                             :fill-pointer 0)))
+    (with-initialized-foreign-array (bamtp 'oci:oraub-8 n 0)
+      (with-initialized-foreign-array (camtp 'oci:oraub-8 n 0)
+        (with-initialized-foreign-array (offp 'oci:oraub-8 n 1)
+          (with-initialized-foreign-object (np 'oci:ub-4 n)
+            (cffi:with-foreign-object (buf 'oci:ub-1 siz)
+              (with-initialized-foreign-array (bufp :pointer n buf)
+                (with-initialized-foreign-array (bufl 'oci:oraub-8 n siz)
+                  (oci-call
+                   (oci:lob-array-read svchp errhp np locators
+                                       bamtp camtp offp bufp bufl
+                                       oci:+first-piece+
+                                       null (cffi:callback download-lobs-cb)
+                                       (or csid 0) oci:+sqlcs-implicit+)))))))))))
 
 (defun ensure-lobs-downloaded (defin3rs nrows)
-  (zacross (d defin3rs)
-    (with-slots (indicators values value-size typemap lobv) d
-      (when lobv
-        (download-lobs-into nrows indicators values value-size typemap lobv)))))
+  (with-list-appender
+    (let ((n 0))
+      (zacross (d defin3rs)
+        (with-slots (indicators values value-size typemap lobv) d
+          (when lobv
+            (assert (eql value-size #.(cffi:foreign-type-size :pointer)))
+            (dotimes (r nrows)
+              (let ((locator (cffi:mem-aref values :pointer r))
+                    (indicator (cffi:mem-aref indicators :short r)))
+                (ecase indicator
+                  (-1
+                   (setf (aref lobv r) :null))
+                  (0
+                   (appending
+                    (cons locator
+                          (let ((rr r)
+                                (external-type (typemap-external-type typemap)))
+                            (lambda (x)
+                              (setf (aref lobv rr)
+                                    (ecase external-type
+                                      (112 ;; clob
+                                       (babel:octets-to-string x :encoding :utf-16le))
+                                      (113 ;; blob
+                                       (coerce x '(simple-array (unsigned-byte 8) (*))))))))))
+                   (incf n))))))))
+      (let ((*pending-lobs* (appended)))
+        (when *pending-lobs*
+          (cffi:with-foreign-object (bufp :pointer n)
+            (loop
+               for (locator . fn) in *pending-lobs*
+               for i from 0
+               do (setf (cffi:mem-aref bufp :pointer i) locator))
+            (download-lobs-using-callback bufp n oci:+utf-16-id+)))))))
 
 (defun fetch-rows (tx stm rfn mkcfn &aux (nrows1 42))
   (with-defin3rs (d tx stm nrows1)
