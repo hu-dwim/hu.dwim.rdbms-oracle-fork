@@ -806,17 +806,13 @@
   (declare (ignore ctxp array-iter changed-bufpp changed-lenp))
   #+allegro
   (setq len (+ (ash len-hi 32) len))
-  (flet ((move ()
-           (dotimes (i len)
-             (vector-push-extend (cffi:mem-aref bufxp 'oci:ub-1 i)
-                                 *download-lobs-buffer*))))
-    (ecase piece
-      ((#.oci:+first-piece+ #.oci:+next-piece+)
-       (move))
-      (#.oci:+last-piece+
-       (move)
-       (funcall (cdr (pop *pending-lobs*)) *download-lobs-buffer*)
-       (setf (fill-pointer *download-lobs-buffer*) 0))))
+  (dotimes (i len)
+    (vector-push-extend (cffi:mem-aref bufxp 'oci:ub-1 i) *download-lobs-buffer*))
+  (ecase piece
+    ((#.oci:+first-piece+ #.oci:+next-piece+))
+    (#.oci:+last-piece+
+     (funcall (cdr (pop *pending-lobs*)) *download-lobs-buffer*)
+     (setf (fill-pointer *download-lobs-buffer*) 0)))
   oci:+continue+)
 
 (cffi:defcallback download-lobs-cb oci:sb-4 ((ctxp :pointer)
