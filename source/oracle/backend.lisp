@@ -301,9 +301,9 @@
 ;;; returned, e.g. during nbatch (bulk insert/update).
 ;;;
 ;;; Definers represent results of the query as specified in the query
-;;; select-list.  Ordinary data are retrieved directly while lob data
-;;; are downloaded using download-clob or download-blob functions
-;;; after the results (and appropriate lob locators) were fetched.
+;;; select-list.  To reduce the number of round-trips to the server,
+;;; several rows are fetched at once.  Lobs for those rows are fetched
+;;; all in one go after that.
 
 ;;; binders
 
