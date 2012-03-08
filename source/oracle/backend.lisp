@@ -718,8 +718,6 @@
   (ecase ind
     (-1 :null)
     (0 (ecase (typemap-external-type typemap)
-         (#.oci:+sqlt-clob+ (string-from-clob bufp alen))
-         (#.oci:+sqlt-blob+ (byte-array-from-blob bufp alen))
          (#.oci:+sqlt-timestamp+ (local-time-from-timestamp bufp alen) #+nil(decode-datetime bufp))
          (#.oci:+sqlt-timestamp-tz+ (local-time-from-timestamp-tz bufp alen) #+nil(decode-datetime-tz bufp))
          (#.oci:+sqlt-str+ (oci-string-to-lisp bufp alen))

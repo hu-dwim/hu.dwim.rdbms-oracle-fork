@@ -160,20 +160,12 @@
   (assert (stringp str))
   (make-lob-locator-indirect t)) ;; actual value via upload-lob
 
-(def function string-from-clob (ptr len)
-  (assert (= #.(cffi:foreign-type-size :pointer) len))
-  (download-clob (cffi:mem-ref ptr :pointer)))
-
 ;;;;;;
 ;;; Binary data conversions
 
 (def function byte-array-to-blob (ba)
   (assert (typep ba 'vector)) ;; '(vector (unsigned-byte 8))
   (make-lob-locator-indirect t)) ;; actual value via upload-lob
-
-(def function byte-array-from-blob (ptr len)
-  (assert (= #.(cffi:foreign-type-size :pointer) len))
-  (download-blob (cffi:mem-ref ptr :pointer)))
 
 ;;;;;;
 ;;; Datetime conversions
