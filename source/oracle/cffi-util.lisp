@@ -297,14 +297,14 @@
 (def function lob-flush-buffer (svchp errhp locator)
   (oci-call (oci:lob-flush-buffer svchp errhp locator oci:+lob-buffer-nofree+)))
 
-(def method upload-lob (locator (value string))
+(defun upload-clob (locator value)
   (assert (plusp (length value)))
   (let ((svchp (service-context-handle-of *transaction*))
         (errhp (error-handle-of *transaction*)))
     (with-foreign-oci-string (value bufp siz)
       (lob-write svchp errhp locator bufp siz (length value) oci:+utf-16-id+))))
 
-(def method upload-lob (locator (value vector))
+(defun upload-blob (locator value)
   (assert (plusp (length value)))
   (let ((svchp (service-context-handle-of *transaction*))
         (errhp (error-handle-of *transaction*))
@@ -316,6 +316,11 @@
          below siz ;; stop at the vector's fill-pointer
          do (setf (cffi:mem-aref bufp 'oci:ub-1 i) byte))
       (lob-write svchp errhp locator bufp siz))))
+
+(defun upload-lob (locator value)
+  (etypecase value
+    (string (upload-clob locator value))
+    (vector (upload-blob locator value))))
 
 (defun lob-chunk-size (svchp errhp locp)
   (with-falloc-object (chunksizep oci:ub-4)
