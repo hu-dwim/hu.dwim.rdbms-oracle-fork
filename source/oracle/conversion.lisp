@@ -593,7 +593,7 @@ digit is the first or NIL for 0."
 
 ;; FIXME: this should be in local-time
 (def function make-timezone (hours minutes)
-  (let ((offset-in-sec (* (+ (* 60 hours) minutes) 60)))
+  (progn ;;let ((offset-in-sec (* (+ (* 60 hours) minutes) 60)))
     (if (and (= minutes 0)
              (= hours 0))
         +utc-zone+
