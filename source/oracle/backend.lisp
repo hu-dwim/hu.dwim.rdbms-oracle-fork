@@ -338,12 +338,7 @@
 (defvar *dynamic-binding-types*)
 (defvar *dynamic-binding-locators*)
 
-(defvar *convert-value-alloc*)
 (defvar *convert-value-alloc-lob*)
-
-(defun free-later (x)
-  (push x *convert-value-alloc*)
-  x)
 
 (defun free-later-lob (x)
   (push x *convert-value-alloc-lob*)
@@ -360,8 +355,6 @@
          (sql-type (elt *dynamic-binding-types* pos0)))
     (multiple-value-bind (ptr len ind)
         (convert-value value sql-type (out-position-p pos0))
-      (free-later ptr)
-      (free-later ind)
       (if (and (lob-type-p sql-type)
                (not (cffi-sys:null-pointer-p ptr)))
           (let ((locator (cffi:mem-ref ptr :pointer)))
@@ -394,8 +387,6 @@
     (assert (lob-type-p sql-type)) ;; TODO THL do not crash foreign code;-)
     (multiple-value-bind (ptr len ind)
         (convert-value value sql-type t)
-      (free-later ptr)
-      (free-later ind)
       (let ((locator (cffi:mem-ref ptr :pointer)))
         (free-later-lob locator)
         (push locator (aref *dynamic-binding-locators* pos0))
@@ -468,8 +459,6 @@
                                        (cffi-sys:make-pointer pos0)
                                        (cffi:callback bind-dynamic-out-cb))))
           (t
-           (free-later ptr)
-           (free-later ind)
            (when (and (lob-type-p btype)
                       (not (cffi-sys:null-pointer-p ptr)))
              (free-later-lob (cffi:mem-ref ptr :pointer)))))
@@ -903,13 +892,11 @@
          (*dynamic-binding-types* btypes)
          (*dynamic-binding-locators*
           (and nbatch (make-array (length btypes) :initial-element nil)))
-         (*convert-value-alloc* nil)
          (*convert-value-alloc-lob* nil))
     (unwind-protect
          (with-binders (stm tx btypes bvalues nbatch)
            (stmt-execute stm *default-oci-flags* nbatch))
-      (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
-      #+nil(mapc 'cffi:foreign-free *convert-value-alloc*)))
+      (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)))
   (values
    (fetch-rows tx stm
                (make-collector visitor result-type)
