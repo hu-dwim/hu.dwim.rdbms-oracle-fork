@@ -21,8 +21,7 @@
 ;;; Boolean conversions
 
 (def function boolean-to-char (value)
-  (foreign-oci-string-alloc (if (member value '(nil "FALSE") :test #'equal) "N" "Y")
-                            :null-terminated-p #f))
+  (foreign-oci-string-alloc (if (member value '(nil "FALSE") :test #'equal) "N" "Y")))
 
 (def function boolean-from-char (ptr len)
   (assert (= len (oci-char-width)))
@@ -40,7 +39,7 @@
 (def function integer-to-int8 (value)
   (assert (typep value '(signed-byte 8)))
   (values
-   (cffi:foreign-alloc 'oci:sb-1 :initial-element value)
+   (heap-falloc 'oci:sb-1 1 value)
    1))
 
 (def function integer-from-int8 (ptr len)
@@ -50,7 +49,7 @@
 (def function integer-to-int16 (value)
   (assert (typep value '(signed-byte 16)))
   (values
-   (cffi:foreign-alloc 'oci:sb-2 :initial-element value)
+   (heap-falloc 'oci:sb-2 1 value)
    2))
 
 (def function integer-from-int16 (ptr len)
@@ -60,7 +59,7 @@
 (def function integer-to-int32 (value)
   (assert (typep value '(signed-byte 32)))
   (values
-   (cffi:foreign-alloc 'oci:sb-4 :initial-element value)
+   (heap-falloc 'oci:sb-4 1 value)
    4))
 
 (def function integer-from-int32 (ptr len)
@@ -82,7 +81,7 @@
 (def function float-to-bfloat (value)
   (assert (or (floatp value) (integerp value))) ;; not rational, why?
   (values
-   (cffi:foreign-alloc :float :initial-element (coerce value 'single-float))
+   (heap-falloc :float 1 (coerce value 'single-float))
    4))
 
 (def function float-from-bfloat (ptr len)
@@ -92,7 +91,7 @@
 (def function double-to-bdouble (value)
   (assert (or (floatp value) (integerp value))) ;; not rational, why?
   (values
-   (cffi:foreign-alloc :double :initial-element (coerce value 'double-float))
+   (heap-falloc :double 1 (coerce value 'double-float))
    8))
 
 (def function double-from-bdouble (ptr len)
@@ -104,7 +103,7 @@
 
 (def function rational-to-number (rational &key (precision 38) (scale 0))
   (let ((bytes (rational-to-byte-array rational precision scale)))
-    (cffi:foreign-alloc 'oci:ub-1 :count (length bytes) :initial-contents bytes)))
+    (heap-falloc 'oci:ub-1 (length bytes) bytes)))
 
 (def function rational-from-number (ptr len)
   (assert (<= 1 len 21))
@@ -133,7 +132,7 @@
 (def function rational-to-varnum (rational &key (precision 38) (scale 0))
   (let* ((bytes (rational-to-byte-array rational precision scale))
          (len (length bytes))
-         (varnum (cffi:foreign-alloc 'oci:ub-1 :count (1+ len))))
+         (varnum (heap-falloc 'oci:ub-1 (1+ len))))
     (setf (cffi:mem-aref varnum 'oci:ub-1 0) len)
     (loop for i from 0 below len
           do (setf (cffi:mem-aref varnum 'oci:ub-1 (1+ i)) (aref bytes i)))
@@ -150,7 +149,7 @@
 
 (def function string-to-string (value)
   (assert (and (stringp value) (not (equal "" value))))
-  (foreign-oci-string-alloc value))
+  (foreign-oci-string-alloc value t))
 
 (def function string-from-string (ptr length)
   (declare (ignore length)) ; null terminated
@@ -241,7 +240,7 @@
   (with-decoded-timestamp (:sec ss :minute mm :hour hh :day day :month month :year year :timezone +utc-zone+)
       timestamp
     (bind (((:values century year) (floor year 100))
-           (date (cffi:foreign-alloc 'oci:ub-1 :count 7)))
+           (date (heap-falloc 'oci:ub-1 7)))
       (setf (cffi:mem-aref date 'oci:ub-1 0) (+ 100 century) ; TODO check BC dates
             (cffi:mem-aref date 'oci:ub-1 1) (+ 100 year)
             (cffi:mem-aref date 'oci:ub-1 2) month
@@ -274,7 +273,7 @@
   ;;       OCIDateSetTime macros are not available
   (with-decoded-timestamp (:sec ss :minute mm :hour hh :day day :month month :year year :timezone +utc-zone+)
       timestamp
-    (bind ((oci-date (cffi:foreign-alloc 'oci:date))
+    (bind ((oci-date (heap-falloc 'oci:date))
            (oci-time (cffi:foreign-slot-pointer oci-date 'oci:date 'oci::date-time)))
       (setf (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-yyyy) year
             (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-mm) month
@@ -307,7 +306,7 @@
 (def function cdate-to-date (cdate)
   (multiple-value-bind (y m d) (decode-cdate cdate)
     (bind (((:values century year) (floor y 100))
-           (date (cffi:foreign-alloc 'oci:ub-1 :count 7)))
+           (date (heap-falloc 'oci:ub-1 7)))
       (setf (cffi:mem-aref date 'oci:ub-1 0) (+ 100 century) ; TODO check BC dates
             (cffi:mem-aref date 'oci:ub-1 1) (+ 100 year)
             (cffi:mem-aref date 'oci:ub-1 2) m
@@ -321,7 +320,7 @@
   ;; FIXME using fields of the opaque OCIDate structure, because the OCIDateSetDate and
   ;;       OCIDateSetTime macros are not available
   (multiple-value-bind (y m d) (decode-cdate cdate)
-    (bind ((oci-date (cffi:foreign-alloc 'oci:date))
+    (bind ((oci-date (heap-falloc 'oci:date))
            (oci-time (cffi:foreign-slot-pointer oci-date 'oci:date 'oci::date-time)))
       (setf (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-yyyy) y
             (cffi:foreign-slot-value oci-date 'oci:date 'oci::date-mm) m
@@ -375,7 +374,7 @@
 
 ;; TODO rename to something like to-oracle-timestamp
 (def function local-time-to-timestamp (timestamp)
-  (bind ((oci-date-time-pointer (cffi::foreign-alloc :pointer)))
+  (bind ((oci-date-time-pointer (heap-falloc :pointer)))
     (oci-call (oci:descriptor-alloc (environment-handle-of *transaction*)
                                     oci-date-time-pointer
                                     oci:+dtype-timestamp+
@@ -401,13 +400,13 @@
   (assert (= #.(cffi:foreign-type-size :pointer) len))
   (let ((environment-handle (environment-handle-of *transaction*))
         (error-handle (error-handle-of *transaction*)))
-    (cffi:with-foreign-objects ((year 'oci:sb-2)
-                               (month 'oci:ub-1)
-                               (day 'oci:ub-1)
-                               (hour 'oci:ub-1)
-                               (min 'oci:ub-1)
-                               (sec 'oci:ub-1)
-                               (fsec 'oci:ub-4))
+    (with-falloc-objects ((year oci:sb-2)
+                          (month oci:ub-1)
+                          (day oci:ub-1)
+                          (hour oci:ub-1)
+                          (min oci:ub-1)
+                          (sec oci:ub-1)
+                          (fsec oci:ub-4))
      (let* ((oci-date-time-pointer (cffi:mem-ref ptr '(:pointer oci:date-time)))
             (oci-date-time (cffi:mem-ref oci-date-time-pointer 'oci:date-time)))
        (oci-call (oci:date-time-get-date environment-handle
@@ -435,7 +434,7 @@
 (def function local-time-to-timestamp-tz (timestamp)
   (let ((environment-handle (environment-handle-of *transaction*))
         (error-handle (error-handle-of *transaction*))
-        (oci-date-time-pointer (cffi::foreign-alloc :pointer))
+        (oci-date-time-pointer (heap-falloc :pointer))
         ;; TODO this is broken here
         (timezone-str (timezone-as-HHMM-string timestamp)))
     (oci-call (oci:descriptor-alloc environment-handle
@@ -464,15 +463,15 @@
   (declare (ignore len))
   (bind ((environment-handle (environment-handle-of *transaction*))
          (error-handle (error-handle-of *transaction*)))
-    (cffi:with-foreign-objects ((year 'oci:sb-2)
-                                (month 'oci:ub-1)
-                                (day 'oci:ub-1)
-                                (hour 'oci:ub-1)
-                                (min 'oci:ub-1)
-                                (sec 'oci:ub-1)
-                                (fsec 'oci:ub-4)
-                                (offset-hour 'oci:sb-1)
-                                (offset-minute 'oci:sb-1))
+    (with-falloc-objects ((year oci:sb-2)
+                          (month oci:ub-1)
+                          (day oci:ub-1)
+                          (hour oci:ub-1)
+                          (min oci:ub-1)
+                          (sec oci:ub-1)
+                          (fsec oci:ub-4)
+                          (offset-hour oci:sb-1)
+                          (offset-minute oci:sb-1))
       (bind ((oci-date-time-pointer (cffi:mem-ref ptr :pointer))
              (oci-date-time (cffi:mem-ref oci-date-time-pointer 'oci:date-time)))
         (oci-call (oci:date-time-get-date environment-handle

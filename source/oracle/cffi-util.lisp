@@ -28,7 +28,7 @@
         (cffi:mem-ref ,data-pointer :pointer)
         :count (cffi:mem-ref ,size-pointer 'oci:ub-4)
         :encoding (connection-encoding-of (database-of *transaction*)))
-      `(cffi:mem-ref ,data-pointer ,type)))
+      `(cffi:mem-ref ,data-pointer ',type)))
 
 (def function oci-attr-get (param-descriptor
                      attribute-id
@@ -42,8 +42,8 @@
                           (error-handle-of *transaction*))))
 
 (def macro get-param-descriptor-attribute (param-descriptor attribute type)
-  `(cffi:with-foreign-objects ((data-pointer ,type)
-                               (size-pointer 'oci:ub-4))
+  `(with-falloc-objects ((data-pointer ,type)
+                         (size-pointer oci:ub-4))
     (oci-call (oci:attr-get ,param-descriptor
                oci:+dtype-param+
                data-pointer
@@ -53,8 +53,8 @@
     (dereference-foreign-pointer data-pointer ,type size-pointer)))
 
 (def macro get-statement-attribute (statement attribute type)
-  `(cffi:with-foreign-objects ((data-pointer ,type)
-                               (size-pointer 'oci:ub-4))
+  `(with-falloc-objects ((data-pointer ,type)
+                         (size-pointer oci:ub-4))
     (oci-call (oci:attr-get (statement-handle-of ,statement)
                oci:+htype-stmt+
                data-pointer
@@ -65,27 +65,27 @@
 
 (def function select-p (prepared-statement)
   (= oci:+stmt-select+
-     (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
+     (get-statement-attribute prepared-statement oci:+attr-stmt-type+ oci:ub-2)))
 
 (def function insert-p (prepared-statement)
   (= oci:+stmt-insert+
-     (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
+     (get-statement-attribute prepared-statement oci:+attr-stmt-type+ oci:ub-2)))
 
 (def function update-p (prepared-statement)
   (= oci:+stmt-update+
-     (get-statement-attribute prepared-statement oci:+attr-stmt-type+ 'oci:ub-2)))
+     (get-statement-attribute prepared-statement oci:+attr-stmt-type+ oci:ub-2)))
 
-(def macro with-foreign-oci-string ((string c-string c-size &key (null-terminated-p #f)) &body body)
-  `(cffi:with-foreign-string ((,c-string ,c-size) ,string
-                              :encoding (connection-encoding-of (database-of *transaction*))
-                              :null-terminated-p ,null-terminated-p)
+(defmacro with-foreign-oci-string ((string c-string c-size) &body body)
+  `(with-falloc-string (,c-string ,c-size ,string nil
+                                  (connection-encoding-of (database-of *transaction*))
+                                  nil)
      ,@body))
 
-(def macro foreign-oci-string-alloc (string &rest args)
-  `(cffi:foreign-string-alloc
-    ,string
-    :encoding (connection-encoding-of (database-of *transaction*))
-    ,@args))
+(defmacro foreign-oci-string-alloc (string &optional null-terminate-p)
+  `(with-falloc-string (bufp siz ,string :heap
+                             (connection-encoding-of (database-of *transaction*))
+                             ,null-terminate-p)
+     (values bufp siz)))
 
 (def function oci-string-to-lisp (pointer &optional size)
   (declare (optimize speed))
@@ -116,8 +116,7 @@
 
 
 (defmacro set-attribute (handle handle-type attribute value &optional (type 'oci:ub-4))
-  `(cffi:with-foreign-object (data ',type)
-     (setf (cffi:mem-aref data ',type) ,value)
+  `(with-falloc-object (data ,type 1 ,value)
      (oci-call (oci:attr-set ,handle
                              ,handle-type
                              data
@@ -248,8 +247,7 @@
   (descriptor-free descriptor-ptr oci:+dtype-lob+))
 
 (def function set-empty-lob (locator)
-  (cffi:with-foreign-object (attribute 'oci:ub-4)
-    (setf (cffi:mem-aref attribute 'oci:ub-4) 0)
+  (with-falloc-object (attribute oci:ub-4 1 0)
     (oci-call (oci:attr-set locator
                             oci:+dtype-lob+
                             attribute
@@ -258,7 +256,7 @@
                             (error-handle-of *transaction*)))))
 
 (def function make-lob-locator (&optional empty)
-  (cffi:with-foreign-object (descriptor-ptr-ptr :pointer)
+  (with-falloc-object (descriptor-ptr-ptr :pointer)
     (allocate-oci-lob-locator descriptor-ptr-ptr)
     (let ((locator (cffi:mem-aref descriptor-ptr-ptr :pointer)))
       (when empty
@@ -267,7 +265,7 @@
 
 (defun make-lob-locator-indirect (&optional empty)
   (values
-   (foreign-alloc-with-initial-element :pointer (make-lob-locator empty))
+   (heap-falloc :pointer 1 (make-lob-locator empty))
    #.(cffi:foreign-type-size :pointer)))
 
 (def function clob-type-p (sql-type)
@@ -281,8 +279,7 @@
       (blob-type-p sql-type)))
 
 (def function lob-write (svchp errhp locator bufp siz &optional amt csid)
-  (cffi:with-foreign-object (amtp 'oci:sb-4)
-    (setf (cffi:mem-ref amtp 'oci:sb-4) (or amt siz))
+  (with-falloc-object (amtp oci:sb-4 1 (or amt siz))
     (oci-call (oci:lob-write svchp errhp locator amtp 1 bufp siz oci:+one-piece+
                              null null (or csid 0) oci:+sqlcs-implicit+))
     (assert (= (or amt siz) (cffi:mem-ref amtp 'oci:sb-4)))))
@@ -304,28 +301,23 @@
   (assert (plusp (length value)))
   (let ((svchp (service-context-handle-of *transaction*))
         (errhp (error-handle-of *transaction*)))
-    (multiple-value-bind (bufp siz) (foreign-oci-string-alloc value)
-      (unwind-protect (lob-write svchp errhp locator bufp siz
-                                 (length value) oci:+utf-16-id+)
-        (cffi:foreign-string-free bufp)))))
+    (with-foreign-oci-string (value bufp siz)
+      (lob-write svchp errhp locator bufp siz (length value) oci:+utf-16-id+))))
 
 (def method upload-lob (locator (value vector))
   (assert (plusp (length value)))
   (let ((svchp (service-context-handle-of *transaction*))
         (errhp (error-handle-of *transaction*))
         (siz (length value)))
-    (let ((bufp (cffi::foreign-alloc 'oci:ub-1 :count siz)))
-      (unwind-protect
-           (progn
-             (loop
-                for byte across value
-                for i from 0
-		below siz	;stop at the vector's fill-pointer
-                do (setf (cffi:mem-aref bufp 'oci:ub-1 i) byte))
-             (lob-write svchp errhp locator bufp siz))
-        (cffi:foreign-string-free bufp)))))
+    (with-falloc-object (bufp oci:ub-1 siz)
+      (loop
+         for byte across value
+         for i from 0
+         below siz ;; stop at the vector's fill-pointer
+         do (setf (cffi:mem-aref bufp 'oci:ub-1 i) byte))
+      (lob-write svchp errhp locator bufp siz))))
 
 (defun lob-chunk-size (svchp errhp locp)
-  (cffi:with-foreign-object (chunksizep 'oci:ub-4)
+  (with-falloc-object (chunksizep oci:ub-4)
     (oci-call (oci:lob-get-chunk-size svchp errhp locp chunksizep))
     (cffi:mem-ref chunksizep 'oci:ub-4)))

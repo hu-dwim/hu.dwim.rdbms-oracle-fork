@@ -18,7 +18,8 @@
                 :components ((:module "oracle"
                               :components ((:file "package")
                                            (:file "cffi" :depends-on ("package"))
-                                           (:file "database" :depends-on ("cffi"))
+                                           (:file "falloc" :depends-on ("cffi"))
+                                           (:file "database" :depends-on ("falloc"))
                                            (:file "syntax" :depends-on ("database"))
                                            (:file "ddl" :depends-on ("database"))
                                            (:file "cffi-util" :depends-on ("database"))

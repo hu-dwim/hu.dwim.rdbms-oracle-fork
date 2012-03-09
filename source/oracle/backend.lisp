@@ -59,10 +59,11 @@
                             &key visitor binding-types binding-values result-type out-position
                             &allow-other-keys)
   (rdbms.debug "Executing ~S" command)
-  (let ((statement (prepare-command database transaction command)))
-    (unwind-protect
-         (execute-prepared-statement transaction statement binding-types binding-values visitor result-type out-position)
-      (free-prepared-statement statement))))
+  (with-falloc ()
+    (let ((statement (prepare-command database transaction command)))
+      (unwind-protect
+           (execute-prepared-statement transaction statement binding-types binding-values visitor result-type out-position)
+        (free-prepared-statement statement)))))
 
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
@@ -157,6 +158,37 @@
 (defun set-default-lob-prefetching (value)
   (set-session-attribute OCI_ATTR_DEFAULT_LOBPREFETCH_SIZE value))
 
+(defun logon (tx env datasource username password)
+  (rdbms.debug "Logging on in transaction ~A" tx)
+  (with-falloc ()
+    (if *use-connection-pool*
+        (server-attach-using-pool (ensure-connection-pool
+                                   env
+                                   datasource
+                                   username
+                                   password))
+        (server-attach datasource))
+    (oci-call (oci:attr-set (service-context-handle-of tx)
+                            oci:+htype-svcctx+
+                            (server-handle-of tx)
+                            0
+                            oci:+attr-server+
+                            (error-handle-of tx)))
+    (handle-alloc (session-handle-pointer tx) oci:+htype-session+)
+    (set-session-string-attribute oci:+attr-username+ username)
+    (set-session-string-attribute oci:+attr-password+ password)
+    (oci-call (oci:session-begin (service-context-handle-of tx)
+                                 (error-handle-of tx)
+                                 (session-handle-of tx)
+                                 oci:+cred-rdbms+
+                                 oci:+default+))
+    (oci-call (oci:attr-set (service-context-handle-of tx)
+                            oci:+htype-svcctx+
+                            (session-handle-of tx)
+                            0
+                            oci:+attr-session+
+                            (error-handle-of tx)))))
+
 (def function connect (transaction)
   (assert (cl:null (environment-handle-pointer transaction)))
   (ensure-oracle-oci-is-loaded)
@@ -186,39 +218,7 @@
 
     (iter connecting
           (with-simple-restart (retry "Retry connecting to Oracle")
-            (rdbms.debug "Logging on in transaction ~A" transaction)
-            (if *use-connection-pool*
-		(server-attach-using-pool (ensure-connection-pool
-					   environment
-					   datasource
-					   user-name
-					   password))
-		(server-attach datasource))
-
-            (oci-call (oci:attr-set (service-context-handle-of transaction)
-                                    oci:+htype-svcctx+
-                                    (server-handle-of transaction)
-                                    0
-                                    oci:+attr-server+
-                                    (error-handle-of transaction)))
-
-            (handle-alloc (session-handle-pointer transaction) oci:+htype-session+)
-
-            (set-session-string-attribute oci:+attr-username+ user-name)
-            (set-session-string-attribute oci:+attr-password+ password)
-
-            (oci-call (oci:session-begin (service-context-handle-of transaction)
-                                         (error-handle-of transaction)
-                                         (session-handle-of transaction)
-                                         oci:+cred-rdbms+
-                                         oci:+default+))
-
-            (oci-call (oci:attr-set (service-context-handle-of transaction)
-                                    oci:+htype-svcctx+
-                                    (session-handle-of transaction)
-                                    0
-                                    oci:+attr-session+
-                                    (error-handle-of transaction)))
+            (logon transaction environment datasource user-name password)
             (return-from connecting))
           (unless (cffi:null-pointer-p (session-handle-of transaction))
             (oci-call (oci:handle-free (session-handle-of transaction) oci:+htype-session+))
@@ -308,7 +308,7 @@
 ;;; binders
 
 (defun alloc-indicator (is-null)
-  (foreign-alloc-with-initial-element 'oci:sb-2 (if is-null -1 0)))
+  (heap-falloc 'oci:sb-2 1 (if is-null -1 0)))
 
 (defun is-null-p (bval btype)
   (or (eql bval :null)
@@ -443,7 +443,7 @@
     ;; TODO THL use cffi:with- for ptr? instead of alloc and free?
     (multiple-value-bind (ptr len ind)
         (convert-value bval btype out-position-p)
-      (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
+      (with-falloc-object (handle :pointer 1 (cffi-sys:null-pointer))
         (oci-call (oci:bind-by-pos (statement-handle-of stm)
                                    handle
                                    (error-handle-of tx)
@@ -552,7 +552,7 @@
 
 (defun call-with-defin3r-buffer (nrows1 nbytes1 typemap fn)
   (let ((nbytes (* nrows1 nbytes1)))
-    (with-initialized-foreign-array (ptr :uint8 nbytes 0)
+    (with-falloc-object (ptr :uint8 nbytes 0)
       (typemap-allocate-instances typemap ptr nbytes1 nrows1)
       (unwind-protect (funcall fn ptr nbytes)
         (typemap-free-instances typemap ptr nbytes1 nrows1)))))
@@ -562,8 +562,8 @@
                              (lambda (,ptr ,nbytes) ,@body)))
 
 (defun parse-paraminfo (paraminfo)
-  (cffi:with-foreign-objects ((attribute-value :uint8 8)
-                              (attribute-value-length 'oci:ub-4))
+  (with-falloc-objects ((attribute-value :uint8 8)
+                        (attribute-value-length oci:ub-4))
     (macrolet
 	;; use a macro so that the compiler macro on mem-ref can see the
 	;; cffi-type!  essential for speed.
@@ -609,35 +609,35 @@
                                                :scale scale))
            (external-type (typemap-external-type typemap))
            (nbytes1 (data-size-for external-type csize)))
-      (cffi:with-foreign-object (return-codes :unsigned-short nrows1)
-        (cffi:with-foreign-object (indicators :short nrows1)
-          (with-defin3r-buffer (ptr nbytes nrows1 nbytes1 typemap)
-            (declare (ignore nbytes))
-            (with-initialized-foreign-object (handle :pointer (cffi-sys:null-pointer))
-              (oci:define-by-pos
-                  (statement-handle-of stm)
-                  handle
-                (error-handle-of tx)
-                pos1
-                ptr
-                nbytes1
-                external-type
-                indicators
-                null
-                return-codes
-                *default-oci-flags*)
-              (funcall fn (make-defin3r indicators ptr nbytes1 typemap
-                                        (case external-type
-                                          ((112 113)
-                                           (make-array nrows1))))))))))))
+      (with-falloc-objects ((return-codes :unsigned-short nrows1)
+                            (indicators :short nrows1))
+        (with-defin3r-buffer (ptr nbytes nrows1 nbytes1 typemap)
+          (declare (ignore nbytes))
+          (with-falloc-object (handle :pointer 1 (cffi-sys:null-pointer))
+            (oci:define-by-pos
+                (statement-handle-of stm)
+                handle
+              (error-handle-of tx)
+              pos1
+              ptr
+              nbytes1
+              external-type
+              indicators
+              null
+              return-codes
+              *default-oci-flags*))
+          (funcall fn (make-defin3r indicators ptr nbytes1 typemap
+                                    (case external-type
+                                      ((112 113)
+                                       (make-array nrows1))))))))))
 
 (defmacro with-defin3r ((var tx stm nrows1 pos1 paraminfo) &body body)
   `(call-with-defin3r ,tx ,stm ,nrows1 ,pos1 ,paraminfo (lambda (,var) ,@body)))
 
 (defun call-with-defin3rs (tx stm nrows1 fn)
   (let ((d (make-array 8 :adjustable t :fill-pointer 0)))
-    (cffi:with-foreign-object (paraminfo :pointer)
-      (labels ((rec (i)
+    (labels ((rec (i)
+               (with-falloc-object (paraminfo :pointer)
                  (if (eql oci:+success+
                           (oci:param-get (statement-handle-of stm)
                                          oci:+htype-stmt+
@@ -650,8 +650,8 @@
                             (vector-push-extend x d)
                             (rec (1+ i)))
                        (oci:descriptor-free paraminfo oci:+dtype-param+))
-                     (funcall fn d))))
-        (rec 0)))))
+                     (funcall fn d)))))
+      (rec 0))))
 
 (defmacro with-defin3rs ((var tx stm nrows1) &body body)
   `(call-with-defin3rs ,tx ,stm ,nrows1 (lambda (,var) ,@body)))
@@ -709,10 +709,10 @@
         (vector (make-vector-collector)))))
 
 (defun attr-rows-fetched (stm)
-  (get-statement-attribute stm oci:+attr-rows-fetched+ 'oci:ub-4))
+  (get-statement-attribute stm oci:+attr-rows-fetched+ oci:ub-4))
 
 (defun attr-row-count (stm)
-  (get-statement-attribute stm oci:+attr-row-count+ 'oci:ub-4))
+  (get-statement-attribute stm oci:+attr-row-count+ oci:ub-4))
 
 (defun %decode-value (bufp alen ind typemap)
   (ecase ind
@@ -767,23 +767,6 @@
        (dotimes (,i ,n ,z)
          (setq ,z (locally ,@body))))))
 
-;; http://lambda-the-ultimate.org/node/1997#comment-24650
-(defmacro with-struct ((conc-name &rest names) obj &body body)
-  "Like with-slots but works only for structs."
-  (flet ((reader (slot) (intern (concatenate 'string
-					     (symbol-name conc-name)
-					     (symbol-name slot))
-				(symbol-package conc-name))))
-    (let ((tmp (gensym "OO-")))
-      ` (let ((,tmp ,obj))
-          (symbol-macrolet
-              ,(loop for name in names collect
-                    (typecase name
-                      (symbol `(,name (,(reader name) ,tmp)))
-                      (cons `(,(first name) (,(reader (second name)) ,tmp)))
-                      (t (error "Malformed syntax in WITH-STRUCT: ~A" name))))
-            ,@body)))))
-
 (defun decode-cell (defin3r r)
   (with-struct (defin3r- indicators values value-size typemap lobv) defin3r
     (if lobv
@@ -835,19 +818,19 @@
                                              :element-type '(unsigned-byte 8)
                                              :adjustable t
                                              :fill-pointer 0)))
-    (with-initialized-foreign-array (bamtp 'oci:oraub-8 n 0)
-      (with-initialized-foreign-array (camtp 'oci:oraub-8 n 0)
-        (with-initialized-foreign-array (offp 'oci:oraub-8 n 1)
-          (with-initialized-foreign-object (np 'oci:ub-4 n)
-            (cffi:with-foreign-object (buf 'oci:ub-1 siz)
-              (with-initialized-foreign-array (bufp :pointer n buf)
-                (with-initialized-foreign-array (bufl 'oci:oraub-8 n siz)
-                  (oci-call
-                   (oci:lob-array-read svchp errhp np locators
-                                       bamtp camtp offp bufp bufl
-                                       oci:+first-piece+
-                                       null (cffi:callback download-lobs-cb)
-                                       (or csid 0) oci:+sqlcs-implicit+)))))))))))
+    (with-falloc-objects ((bamtp oci:oraub-8 n 0)
+                          (camtp oci:oraub-8 n 0)
+                          (offp oci:oraub-8 n 1)
+                          (np oci:ub-4 1 n)
+                          (buf oci:ub-1 siz)
+                          (bufp :pointer n buf)
+                          (bufl oci:oraub-8 n siz))
+      (oci-call
+       (oci:lob-array-read svchp errhp np locators
+                           bamtp camtp offp bufp bufl
+                           oci:+first-piece+
+                           null (cffi:callback download-lobs-cb)
+                           (or csid 0) oci:+sqlcs-implicit+)))))
 
 (defun ensure-lobs-downloaded (defin3rs nrows)
   (with-list-appender
@@ -877,7 +860,7 @@
                    (incf n))))))))
       (let ((*pending-lobs* (appended)))
         (when *pending-lobs*
-          (cffi:with-foreign-object (bufp :pointer n)
+          (with-falloc-object (bufp :pointer n)
             (loop
                for (locator) in *pending-lobs*
                for i from 0
@@ -926,7 +909,7 @@
          (with-binders (stm tx btypes bvalues nbatch)
            (stmt-execute stm *default-oci-flags* nbatch))
       (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)
-      (mapc 'cffi:foreign-free *convert-value-alloc*)))
+      #+nil(mapc 'cffi:foreign-free *convert-value-alloc*)))
   (values
    (fetch-rows tx stm
                (make-collector visitor result-type)
