@@ -392,7 +392,7 @@
                                          mm
                                          ss
                                          nsec
-                                         (cffi:null-pointer)
+                                         #.(cffi:null-pointer)
                                          0)))
     (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer))))
 

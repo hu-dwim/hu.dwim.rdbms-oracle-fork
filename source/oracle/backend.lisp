@@ -434,7 +434,7 @@
     ;; TODO THL use cffi:with- for ptr? instead of alloc and free?
     (multiple-value-bind (ptr len ind)
         (convert-value bval btype out-position-p)
-      (with-falloc-object (handle :pointer 1 (cffi-sys:null-pointer))
+      (with-falloc-object (handle :pointer 1 #.(cffi-sys:null-pointer))
         (oci-call (oci:bind-by-pos (statement-handle-of stm)
                                    handle
                                    (error-handle-of tx)
@@ -602,7 +602,7 @@
                             (indicators :short nrows1))
         (with-defin3r-buffer (ptr nbytes nrows1 nbytes1 typemap)
           (declare (ignore nbytes))
-          (with-falloc-object (handle :pointer 1 (cffi-sys:null-pointer))
+          (with-falloc-object (handle :pointer 1 #.(cffi-sys:null-pointer))
             (oci:define-by-pos
                 (statement-handle-of stm)
                 handle
