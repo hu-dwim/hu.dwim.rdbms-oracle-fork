@@ -13,16 +13,26 @@
 ;; stack allocation and then meaybe the heap option dropped
 ;; completely.
 
-(defstruct (falloc (:constructor %make-falloc)) hb ht sb st n h s maxh maxs gap)
+(defstruct (falloc (:constructor %make-falloc))
+  base
+  (ht 0 :type fixnum)
+  (sb 0 :type fixnum)
+  (n 0 :type fixnum)
+  (maxh 0 :type fixnum)
+  (maxs 0 :type fixnum)
+  (gap 0 :type fixnum))
 
 (defun make-falloc (nbytes)
-  (let* ((bot (cffi:foreign-alloc :uint8 :count nbytes))
-         (top (cffi-sys:inc-pointer bot nbytes)))
-    (%make-falloc :hb bot :ht bot :sb top :st top :n nbytes
-                  :h nil :s nil :maxh 0 :maxs 0 :gap nbytes)))
+  (%make-falloc :base (cffi:foreign-alloc :uint8 :count nbytes)
+                :ht 0
+                :sb nbytes
+                :n nbytes
+                :maxh 0
+                :maxs 0
+                :gap nbytes))
 
 (defun free-falloc (x)
-  (cffi-sys:foreign-free (falloc-hb x)))
+  (cffi-sys:foreign-free (falloc-base x)))
 
 ;; http://lambda-the-ultimate.org/node/1997#comment-24650
 (defmacro with-struct ((conc-name &rest names) obj &body body)
@@ -42,32 +52,24 @@
             ,@body)))))
 
 (defun reset-falloc (x)
-  (with-struct (falloc- hb ht sb st n h s maxh maxs gap) x
-    (setq ht hb
-          sb st
-          h nil
-          s nil))
+  (with-struct (falloc- ht sb n) x
+    (setq ht 0
+          sb n))
   x)
 
 (defvar *falloc*)
 
 (defun call-with-falloc-object (nbytes1 count value heap fn value-fn)
   (assert (and (plusp nbytes1) (plusp count)))
-  (with-struct (falloc- hb ht sb st n h s maxh maxs gap) *falloc*
-    (macrolet ((pa (x)
-                 `(cffi-sys:pointer-address ,x))
-               (p< (x y)
-                 `(< (pa ,x) (pa ,y)))
-               (p<= (x y)
-                 `(<= (pa ,x) (pa ,y)))
-               (p= (x y)
-                 `(cffi-sys:pointer-eq ,x ,y))
+  (with-struct (falloc- base ht sb n maxh maxs gap) *falloc*
+    (macrolet ((p (x)
+                 `(cffi-sys:inc-pointer base ,x))
                (check ()
                  `(progn
-                    (assert (and (p<= hb ht) (p<= sb st) (p< ht sb)))
-                    (setq maxh (max maxh (- (pa ht) (pa hb)))
-                          maxs (max maxs (- (pa st) (pa sb)))
-                          gap  (min gap  (- (pa sb) (pa ht)))))))
+                    (assert (<= 0 ht sb n))
+                    (setq maxh (max maxh ht)
+                          maxs (max maxs (- n sb))
+                          gap  (min gap (- sb ht))))))
       (check)
       (let ((nbytes (* nbytes1 count)))
         (let ((m (mod nbytes 4))) ;; 4B alignment
@@ -76,22 +78,18 @@
         ;;(assert (zerop (mod nbytes 4)))
         (if heap
             (let ((x ht)
-                  (y (setq ht (cffi-sys:inc-pointer ht nbytes))))
-              ;;(assert (zerop (mod (pa ht) 4)))
+                  (y (setq ht (+ ht nbytes))))
+              ;;(assert (zerop (mod ht 4)))
               (check)
-              (push x h)
-              (unwind-protect (funcall fn (funcall value-fn x count value))
+              (unwind-protect (funcall fn (funcall value-fn (p x) count value))
                 (check)
-                (assert (p<= y ht))))
+                (assert (<= y ht))))
             (let ((x sb)
-                  (y (setq sb (cffi-sys:inc-pointer sb (- nbytes)))))
-              ;;(assert (zerop (mod (pa sb) 4)))
+                  (y (setq sb (- sb nbytes))))
+              ;;(assert (zerop (mod sb 4)))
               (check)
-              (push y s)
-              (unwind-protect (funcall fn (funcall value-fn y count value))
+              (unwind-protect (funcall fn (funcall value-fn (p y) count value))
                 (check)
-                (assert (p= y (pop s)))
-                (assert (p= x (if s (car s) st)))
                 (setq sb x)
                 (check))))))))
 
