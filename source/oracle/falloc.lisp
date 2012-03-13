@@ -58,6 +58,12 @@
   x)
 
 #+allegro
+(cffi:defcfun "memset" :pointer
+  (bufp :pointer)
+  (val :int)
+  (len oci:size-t))
+
+#+allegro
 (defun %initialize8 (base offset cnt val)
   (declare (optimize (speed 3) (safety 0))
            (fixnum offset cnt val))
@@ -165,6 +171,8 @@
               (:float (expand 4 :single-float))
               ((oci:sb-1 :uint8 oci:ub-1)
                (assert (typep val 'fixnum))
+               (memset bufp val cnt)
+               #+nil
                (%initialize8 base offset cnt val))
               ((:short oci:sb-2 :unsigned-short oci:ub-2)
                (assert (typep val 'fixnum))
