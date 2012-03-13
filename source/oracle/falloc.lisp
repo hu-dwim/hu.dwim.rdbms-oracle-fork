@@ -296,7 +296,7 @@
       (oci:ub-4 (expand oci:ub-4))
       (oci:date (expand oci:date)))))
 
-(defparameter *falloc-size* (* 3 (expt 1024 2)))
+(defparameter *falloc-size* (* 10 (expt 1024 2)))
 
 (defvar *falloc-pool* nil)
 (defvar *falloc-pool-lock* (bordeaux-threads:make-lock))
