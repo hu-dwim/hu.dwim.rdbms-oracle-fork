@@ -856,7 +856,9 @@
                do (setf (cffi:mem-aref bufp :pointer i) locator))
             (download-lobs-using-callback bufp n oci:+utf-16-id+)))))))
 
-(defun fetch-rows (tx stm rfn mkcfn &aux (nrows1 42))
+(defvar *nrows1* 42)
+
+(defun fetch-rows (tx stm rfn mkcfn &optional (nrows1 *nrows1*))
   (with-defin3rs (d tx stm nrows1)
     (when (plusp (length d))
       (do (z
