@@ -497,54 +497,88 @@
              (:constructor make-defin3r (indicators values value-size typemap lobv)))
   indicators values value-size typemap lobv)
 
-(defun allocate-oci-date-time (descriptor-ptr-ptr)
-  (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp+))
+#+nil
+(cffi:defcfun ("OCIArrayDescriptorAlloc" OCIArrayDescriptorAlloc) oci:sword
+  (parenth :pointer)
+  (descpp :pointer)
+  (type oci:ub-4)
+  (array_size oci:ub-4)
+  (xtramem_sz oci:size-t)
+  (usrmempp :pointer))
 
-(defun allocate-oci-date-time-tz (descriptor-ptr-ptr)
-  (descriptor-alloc descriptor-ptr-ptr oci:+dtype-timestamp-tz+))
+#+nil
+(cffi:defcfun ("OCIArrayDescriptorFree" OCIArrayDescriptorFree) oci:sword
+  (descp :pointer)
+  (type oci:ub-4))
 
-(defun free-oci-date-time (descriptor-ptr)
-  (descriptor-free descriptor-ptr oci:+dtype-timestamp+))
+(defun alloc-descriptors (descpp n dtype)
+  (declare (optimize speed)
+           (type fixnum n))
+  #+nil
+  (oci-call (OCIArrayDescriptorAlloc (environment-handle-of *transaction*)
+                                     descpp
+                                     dtype
+                                     nrows1
+                                     0
+                                     #.(cffi-sys:null-pointer)))
+  #+nil
+  (dotimes (i nrows1)
+    (oci-call (oci:descriptor-alloc (environment-handle-of *transaction*)
+                                    (cffi:inc-pointer descpp (* nbytes1 i))
+                                    dtype
+                                    0
+                                    #.(cffi-sys:null-pointer))))
+  (let ((envh (environment-handle-of *transaction*))
+        (offset 0))
+    (declare (type fixnum offset))
+    (dotimes (i n)
+      ;;(declare (type fixnum i))
+      (oci-call (oci:descriptor-alloc envh
+                                      (cffi:inc-pointer descpp offset)
+                                      dtype
+                                      0
+                                      #.(cffi-sys:null-pointer)))
+      (incf offset #.(cffi:foreign-type-size :pointer))))
+  #+nil
+  (loop
+     with envh = (environment-handle-of *transaction*)
+     for i from 0 below n
+     for offset from 0 by #.(cffi:foreign-type-size :pointer)
+     do (oci-call (oci:descriptor-alloc envh
+                                        (cffi:inc-pointer descpp offset)
+                                        dtype
+                                        0
+                                        #.(cffi-sys:null-pointer)))))
 
-(defun free-oci-date-time-tz (descriptor-ptr)
-  (descriptor-free descriptor-ptr oci:+dtype-timestamp-tz+))
-
-(defun typemap-allocate-instance (typemap)
-  (case (typemap-external-type typemap)
-    (112 #+nil :string/clob 'allocate-oci-lob-locator)
-    (113 #+nil :byte-array/blob 'allocate-oci-lob-locator)
-    (187 #+nil :local-time/time 'allocate-oci-date-time)
-    ;;(:local-time/timestamp 'allocate-oci-date-time) ;; same as above
-    (188 #+nil :local-time/timestamp-tz 'allocate-oci-date-time-tz)))
-
-(defun typemap-free-instance (typemap)
-  (case (typemap-external-type typemap)
-    (112 #+nil :string/clob 'free-oci-lob-locator)
-    (113 #+nil :byte-array/blob 'free-oci-lob-locator)
-    (187 #+nil :local-time/time 'free-oci-date-time)
-    ;;(:local-time/timestamp 'free-oci-date-time) ;; same as above
-    (188 #+nil :local-time/timestamp-tz 'free-oci-date-time-tz)))
-
-(defun typemap-allocate-instances (typemap ptr nbytes1 nrows1)
-  (let ((constructor (typemap-allocate-instance typemap)))
-    (when constructor
-      (assert (eql #.(cffi:foreign-type-size :pointer) nbytes1))
-      (dotimes (i nrows1)
-        (funcall constructor (cffi:inc-pointer ptr (* nbytes1 i)))))))
-
-(defun typemap-free-instances (typemap ptr nbytes1 nrows1)
-  (let ((destructor (typemap-free-instance typemap)))
-    (when destructor
-      (assert (eql #.(cffi:foreign-type-size :pointer) nbytes1))
-      (dotimes (i nrows1)
-        (funcall destructor (cffi:mem-aref ptr :pointer i))))))
+(defun free-descriptors (descpp n dtype)
+  (declare (optimize speed)
+           (type fixnum n))
+  #+nil
+  (oci-call (OCIArrayDescriptorFree descpp dtype))
+  (let ((offset 0))
+    (declare (type fixnum offset))
+    (dotimes (i n)
+      ;;(declare (type fixnum i))
+      (oci-call
+       (oci:descriptor-free #-allegro(cffi:mem-aref descpp :pointer i)
+                            #+allegro(system:memref-int descpp offset 0 :unsigned-long)
+                            dtype))
+      (incf offset #.(cffi:foreign-type-size :pointer)))))
 
 (defun call-with-defin3r-buffer (nrows1 nbytes1 typemap fn)
-  (let ((nbytes (* nrows1 nbytes1)))
+  (let ((nbytes (* nrows1 nbytes1))
+        (dtype (case (typemap-external-type typemap)
+                 (112 oci:+dtype-lob+)
+                 (113 oci:+dtype-lob+)
+                 (187 oci:+dtype-timestamp+)
+                 (188 oci:+dtype-timestamp-tz+))))
     (with-falloc-object (ptr :uint8 nbytes 0)
-      (typemap-allocate-instances typemap ptr nbytes1 nrows1)
+      (when dtype
+        (assert (eql #.(cffi:foreign-type-size :pointer) nbytes1))
+        (alloc-descriptors ptr nrows1 dtype))
       (unwind-protect (funcall fn ptr nbytes)
-        (typemap-free-instances typemap ptr nbytes1 nrows1)))))
+        (when dtype
+          (free-descriptors ptr nrows1 dtype))))))
 
 (defmacro with-defin3r-buffer ((ptr nbytes nrows1 nbytes1 typemap) &body body)
   `(call-with-defin3r-buffer ,nrows1 ,nbytes1 ,typemap
