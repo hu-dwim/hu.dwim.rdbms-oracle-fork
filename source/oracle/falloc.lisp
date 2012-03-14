@@ -63,7 +63,7 @@
           sb n))
   x)
 
-#+allegro
+(declaim (inline memset))
 (cffi:defcfun "memset" :pointer
   (bufp :pointer)
   (val :int)
@@ -153,7 +153,6 @@
               (mref (incf j)) v7)))))
 
 (defun initialize-falloc-object (base offset cnt val type)
-  #+allegro
   (declare (optimize (speed 3) (safety 0))
            (fixnum offset cnt))
   (let ((bufp (cffi-sys:inc-pointer base offset)))
@@ -192,19 +191,19 @@
                    `(setf (cffi:mem-aref bufp ',typ ,i) ,v))
                  (expand (typ)
                    `(cond
-                      ((vectorp val) (dotimes (i cnt) (one i ,typ (aref val i))))
+                      ((vectorp val) (dotimes (i cnt) (one i ,typ (svref val i))))
                       (t (dotimes (i cnt) (one i ,typ val))))))
         (ecase type
           (:pointer (expand :pointer))
           (:double (expand :double))
           (:float (expand :float))
-          (:uint8 (expand :uint8))
+          ((oci:sb-1 :uint8 oci:ub-1)
+           (assert (typep val 'fixnum))
+           (memset bufp val cnt))
           (:unsigned-short (expand :unsigned-short))
           (:short (expand :short))
-          (oci:sb-1 (expand oci:sb-1))
           (oci:sb-2 (expand oci:sb-2))
           (oci:sb-4 (expand oci:sb-4))
-          (oci:ub-1 (expand oci:ub-1))
           (oci:ub-2 (expand oci:ub-2))
           (oci:ub-4 (expand oci:ub-4))
           (oci:oraub-8 (expand oci:oraub-8)))))
