@@ -93,7 +93,7 @@
       ;; XXX OCI does not have external type for int64?
       (with-slots (bit-size) type
         (cond
-          ((cl:null bit-size) integer/varnum)
+          ((not bit-size) integer/varnum)
           ((<= bit-size 8) integer/int8)
           ((<= bit-size 16) integer/int16)
           ((<= bit-size 32) integer/int32)

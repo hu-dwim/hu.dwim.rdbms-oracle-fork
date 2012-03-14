@@ -6,8 +6,6 @@
 
 (in-package :hu.dwim.rdbms.oracle)
 
-(def symbol-macro null (cffi:null-pointer))
-
 ;; cffi does not inline foreign-alloc with :initial-element, with
 ;; _disastrous_ consequences for performance.  Here's the workaround:
 (defmacro foreign-alloc-with-initial-element (type initial-element)
@@ -16,7 +14,7 @@
      ptr))
 
 (defun make-void-pointer ()
-  (foreign-alloc-with-initial-element '(:pointer :void) null))
+  (foreign-alloc-with-initial-element '(:pointer :void) (cffi:null-pointer)))
 
 (def special-variable *default-oci-flags* (logior oci:+threaded+ oci:+new-length-semantics+))
 
@@ -179,8 +177,8 @@
                               (error-handle-of *transaction*)
                               (or nbatch (if (select-p statement) 0 1))
                               0
-                              null
-                              null
+                              (cffi:null-pointer)
+                              (cffi:null-pointer)
                               (if nbatch oci:+batch-mode+ mode))))
 
 (defun %stmt-fetch-2 (stm nrows orientation offset)
@@ -221,7 +219,7 @@
                               handle-ptr
                               handle-type
                               0
-                              null)))
+                              (cffi:null-pointer))))
 
 (def function dump-c-byte-array (ptr size)
   (with-output-to-string (s)
@@ -234,7 +232,7 @@
                                   descriptor-ptr-ptr
                                   descriptor-type
                                   0
-                                  null)))
+                                  (cffi:null-pointer))))
 
 (def function allocate-oci-lob-locator (descriptor-ptr-ptr)
   (descriptor-alloc descriptor-ptr-ptr oci:+dtype-lob+))
@@ -281,7 +279,7 @@
 (def function lob-write (svchp errhp locator bufp siz &optional amt csid)
   (with-falloc-object (amtp oci:sb-4 1 (or amt siz))
     (oci-call (oci:lob-write svchp errhp locator amtp 1 bufp siz oci:+one-piece+
-                             null null (or csid 0) oci:+sqlcs-implicit+))
+                             (cffi:null-pointer) (cffi:null-pointer) (or csid 0) oci:+sqlcs-implicit+))
     (assert (= (or amt siz) (cffi:mem-ref amtp 'oci:sb-4)))))
 
 (defun call-with-lob-buffering (locator fn)

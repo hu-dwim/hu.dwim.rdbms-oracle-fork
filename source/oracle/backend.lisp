@@ -81,7 +81,7 @@
 ;;; Connection
 
 (def function ensure-connected (transaction)
-  (when (cl:null (environment-handle-pointer transaction))
+  (unless (environment-handle-pointer transaction)
     (connect transaction)))
 
 (def class* oci-environment ()
@@ -109,7 +109,7 @@
 					(:ascii 0)
 					(:utf-16 oci:+utf-16+))
 				      *default-oci-flags*)
-			      null null null null 0 null))
+			      (cffi:null-pointer) (cffi:null-pointer) (cffi:null-pointer) (cffi:null-pointer) 0 (cffi:null-pointer)))
     (make-instance 'oci-environment
 		   :env-handle (cffi:mem-ref &env :pointer))))
 
@@ -189,7 +189,7 @@
                           (error-handle-of tx))))
 
 (def function connect (transaction)
-  (assert (cl:null (environment-handle-pointer transaction)))
+  (assert (not (environment-handle-pointer transaction)))
   (ensure-oracle-oci-is-loaded)
   (bind ((environment (ensure-oci-environment
 		       (connection-encoding-of (database-of *transaction*))))
@@ -221,7 +221,7 @@
             (return-from connecting))
           (unless (cffi:null-pointer-p (session-handle-of transaction))
             (oci-call (oci:handle-free (session-handle-of transaction) oci:+htype-session+))
-            (setf (session-handle-of transaction) null)))
+            (setf (session-handle-of transaction) (cffi:null-pointer))))
     ;;(set-default-lob-prefetching #.(* 1024 1024))
     (when schema
       (setf (session-schema transaction) schema)
@@ -311,18 +311,18 @@
 
 (defun is-null-p (bval btype)
   (or (eql bval :null)
-      (and (cl:null bval)
+      (and (not bval)
            (not (typep btype 'sql-boolean-type)))))
 
 (defun convert-value (bval btype out-variable-p)
   (cond
     ((consp bval) ;; nbatch, data allocated dynamically later
-     (values null #.(* 1024 1024) null)) ;; feel free to use other max size
+     (values (cffi:null-pointer) #.(* 1024 1024) null)) ;; feel free to use other max size
     ((and out-variable-p (lob-type-p btype))
      (multiple-value-bind (ptr len) (make-lob-locator-indirect (equalp #() bval))
        (values ptr len (alloc-indicator (is-null-p bval btype)))))
     ((is-null-p bval btype)
-     (values null 0 (alloc-indicator t)))
+     (values (cffi:null-pointer) 0 (alloc-indicator t)))
     (t
      (multiple-value-bind (ptr len)
          (funcall (typemap-lisp-to-oci (typemap-for-sql-type btype)) bval)
@@ -393,7 +393,7 @@
               (cffi:mem-ref (cffi:mem-ref alenp :pointer) 'oci:ub-4) len
               (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
               (cffi:mem-ref indpp :pointer) ind
-              (cffi:mem-ref rcodepp :pointer) null))))
+              (cffi:mem-ref rcodepp :pointer) (cffi:null-pointer)))))
   oci:+continue+)
 
 (cffi:defcallback bind-dynamic-out-cb oci:sb-4 ((octxp :pointer) ;; dvoid*
@@ -442,10 +442,10 @@
                                    len
                                    (typemap-external-type typemap)
                                    ind
-                                   null ; alenp
-                                   null ; rcodep
-                                   0    ; maxarr_len
-                                   null ; curelep
+                                   (cffi:null-pointer) ; alenp
+                                   (cffi:null-pointer) ; rcodep
+                                   0                   ; maxarr_len
+                                   (cffi:null-pointer) ; curelep
                                    (if nbatch
                                        oci:+data-at-exec+
                                        *default-oci-flags*)))
@@ -645,7 +645,7 @@
               nbytes1
               external-type
               indicators
-              null
+              (cffi:null-pointer)
               return-codes
               *default-oci-flags*))
           (funcall fn (make-defin3r indicators ptr nbytes1 typemap
@@ -851,7 +851,7 @@
        (oci:lob-array-read svchp errhp np locators
                            bamtp camtp offp bufp bufl
                            oci:+first-piece+
-                           null (cffi:callback download-lobs-cb)
+                           (cffi:null-pointer) (cffi:callback download-lobs-cb)
                            (or csid 0) oci:+sqlcs-implicit+)))))
 
 (defun ensure-lobs-downloaded (defin3rs nrows)

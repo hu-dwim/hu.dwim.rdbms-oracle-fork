@@ -63,7 +63,7 @@
 (def method format-sql-syntax-node ((self sql-integer-type) (database oracle))
   (with-slots (bit-size) self
     (cond
-      ((cl:null bit-size) (format-string "NUMBER(*,0)"))
+      ((not bit-size) (format-string "NUMBER(*,0)"))
       ((<= bit-size 16) (format-string "NUMBER(5,0)"))
       ((<= bit-size 32) (format-string "NUMBER(10,0)"))
       ((<= bit-size 64) (format-string "NUMBER(19,0)"))
@@ -156,7 +156,7 @@
 			   ((not (and (typep column 'sql-column-alias)
 				      (alias-of column)))
 			    (format-string (format nil " c~d" i)))
-			   ((cl:null source)
+			   ((not source)
 			    (format-string " ")
 			    (format-sql-identifier (alias-of column)
 						   database))))))

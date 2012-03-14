@@ -20,7 +20,6 @@
                           #:type
                           #:type-of)
 
-  (:shadow #:null)
   (:readtable-setup (setup-readtable/same-as-package :hu.dwim.rdbms)))
 
 (in-package :hu.dwim.rdbms.oracle)

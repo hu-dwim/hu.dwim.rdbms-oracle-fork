@@ -78,7 +78,7 @@
     (cffi:with-foreign-pointer (error-buffer oci:+error-maxmsg-size+)
 
       (oci:error-get (error-handle-of *transaction*) 1
-                     null
+                     (cffi:null-pointer)
                      error-code
                      error-buffer
                      oci:+error-maxmsg-size+ oci:+htype-error+)

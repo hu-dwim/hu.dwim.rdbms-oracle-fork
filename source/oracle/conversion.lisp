@@ -379,7 +379,7 @@
                                     oci-date-time-pointer
                                     oci:+dtype-timestamp+
                                     0
-                                    null))
+                                    (cffi:null-pointer)))
     (with-decoded-timestamp (:nsec nsec :sec ss :minute mm :hour hh :day day :month month :year year :timezone +utc-zone+)
         timestamp
       (oci-call (oci:date-time-construct (environment-handle-of *transaction*)
@@ -392,7 +392,7 @@
                                          mm
                                          ss
                                          nsec
-                                         null
+                                         (cffi:null-pointer)
                                          0)))
     (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer))))
 
@@ -441,7 +441,7 @@
                                     oci-date-time-pointer
                                     oci:+dtype-timestamp-tz+
                                     0
-                                    null))
+                                    (cffi:null-pointer)))
     (with-decoded-timestamp (:nsec nsec :sec ss :minute mm :hour hh :day day :month month :year year :timezone +utc-zone+)
         timestamp
       (with-foreign-oci-string (timezone-str c-timezone-ptr c-timezone-size)
