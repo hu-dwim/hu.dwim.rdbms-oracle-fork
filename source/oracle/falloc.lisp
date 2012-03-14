@@ -308,6 +308,7 @@
 (defvar *falloc-pool-lock* (bordeaux-threads:make-lock))
 
 (defun call-with-falloc (fn)
+  (assert (not (boundp '*falloc*)))
   (let ((*falloc* (reset-falloc
                    (or (bordeaux-threads:with-lock-held (*falloc-pool-lock*)
                          (pop *falloc-pool*))

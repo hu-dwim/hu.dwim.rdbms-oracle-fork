@@ -160,34 +160,33 @@
 
 (defun logon (tx env datasource username password)
   (rdbms.debug "Logging on in transaction ~A" tx)
-  (with-falloc ()
-    (if *use-connection-pool*
-        (server-attach-using-pool (ensure-connection-pool
-                                   env
-                                   datasource
-                                   username
-                                   password))
-        (server-attach datasource))
-    (oci-call (oci:attr-set (service-context-handle-of tx)
-                            oci:+htype-svcctx+
-                            (server-handle-of tx)
-                            0
-                            oci:+attr-server+
-                            (error-handle-of tx)))
-    (handle-alloc (session-handle-pointer tx) oci:+htype-session+)
-    (set-session-string-attribute oci:+attr-username+ username)
-    (set-session-string-attribute oci:+attr-password+ password)
-    (oci-call (oci:session-begin (service-context-handle-of tx)
-                                 (error-handle-of tx)
-                                 (session-handle-of tx)
-                                 oci:+cred-rdbms+
-                                 oci:+default+))
-    (oci-call (oci:attr-set (service-context-handle-of tx)
-                            oci:+htype-svcctx+
-                            (session-handle-of tx)
-                            0
-                            oci:+attr-session+
-                            (error-handle-of tx)))))
+  (if *use-connection-pool*
+      (server-attach-using-pool (ensure-connection-pool
+                                 env
+                                 datasource
+                                 username
+                                 password))
+      (server-attach datasource))
+  (oci-call (oci:attr-set (service-context-handle-of tx)
+                          oci:+htype-svcctx+
+                          (server-handle-of tx)
+                          0
+                          oci:+attr-server+
+                          (error-handle-of tx)))
+  (handle-alloc (session-handle-pointer tx) oci:+htype-session+)
+  (set-session-string-attribute oci:+attr-username+ username)
+  (set-session-string-attribute oci:+attr-password+ password)
+  (oci-call (oci:session-begin (service-context-handle-of tx)
+                               (error-handle-of tx)
+                               (session-handle-of tx)
+                               oci:+cred-rdbms+
+                               oci:+default+))
+  (oci-call (oci:attr-set (service-context-handle-of tx)
+                          oci:+htype-svcctx+
+                          (session-handle-of tx)
+                          0
+                          oci:+attr-session+
+                          (error-handle-of tx))))
 
 (def function connect (transaction)
   (assert (cl:null (environment-handle-pointer transaction)))
