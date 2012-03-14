@@ -7,7 +7,7 @@
 (def syntax-node sql-constraint-with-tablespace (sql-constraint)
   ((tablespace
     nil
-    :type string)))
+    :type (or null string))))
 
 (def syntax-node sql-primary-key-constraint (sql-constraint-with-tablespace)
   ()
@@ -99,7 +99,7 @@
 (def syntax-node sql-create-check-constraint (sql-ddl-statement)
   ((name :type string)
    (table :type string)
-   (expression :type string))
+   (expression :type sql-syntax-node))
   (:format-sql-syntax-node
    (format-string "ALTER TABLE ")
    (format-sql-identifier table)

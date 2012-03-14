@@ -19,17 +19,17 @@
    (where
     ;; e.g. http://www.postgresql.org/docs/8.4/static/indexes-partial.html
     nil
-    :type list)
+    :type (or null sql-syntax-node))
    (using
     ;; e.g. [USING method] for postgresql
     ;; http://www.postgresql.org/docs/8.2/static/sql-createindex.html
     nil
-    :type string)
+    :type (or null string))
    (properties
     ;; index properties for oracle
     ;; http://download.oracle.com/docs/cd/B13789_01/server.101/b10759/statements_5010.htm#i2138869
     nil
-    :type string)
+    :type (or null string))
    (triggers nil :type list)) ;; list of strings
   (:documentation "An SQL index specification."))
 

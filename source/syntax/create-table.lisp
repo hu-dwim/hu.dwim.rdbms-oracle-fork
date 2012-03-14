@@ -17,7 +17,7 @@
     :type list)
    (as
     nil
-    :type (or sql-select sql-set-operation-expression)))
+    :type (or null sql-select sql-set-operation-expression)))
   (:documentation "An SQL CREATE TABLE statement.")
   (:format-sql-syntax-node
    (format-string "CREATE")

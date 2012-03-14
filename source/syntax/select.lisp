@@ -18,25 +18,25 @@
     :type (list sql-table-reference))
    (where
     nil
-    :type sql-expression)
+    :type (or null sql-expression))
    (group-by
     nil
     :type (list sql-expression))
    (having
     nil
-    :type sql-expression)
+    :type (or null sql-expression))
    (order-by
     nil
     :type list)                         ; TODO: element type
    (offset
     nil
-    :type (or null integer))
+    :type (or null integer sql-literal))
    (limit
     nil
-    :type (or null integer))
+    :type (or null integer sql-literal))
    (for
     nil
-    :type (member :update :share)
+    :type (member nil :update :share)
     :accessor for-of)
    (wait
     #t
@@ -72,6 +72,9 @@
      (unless wait
        (format-string " NOWAIT")))))
 
+(defmethod first-columns-of ((qe sql-select))
+  (list (car (columns-of qe))))
+
 ;; TODO shouldn't the NAME slot be called TABLE and be typed (or sql-identifier* sql-table)?
 (def syntax-node sql-table-alias (sql-identifier)
   ((name
@@ -102,14 +105,14 @@
 
 (def syntax-node sql-joined-table (sql-syntax-node)
   ((kind
-    :type (member :cross :inner :left :right :full :union))
+    :type (member nil :cross :inner :left :right :full :union))
    (left
     :type (or sql-table-reference list))
    (right
     :type (or sql-table-reference list))
    (on
     nil
-    :type sql-expression)
+    :type (or null sql-expression))
    (using
     nil
     :type (list sql-identifier*)))
@@ -160,8 +163,23 @@
      (format-string " AS ")
      (format-sql-identifier alias))))
 
+(defun format-column-reference (x db)
+  (typecase x
+    (sql-column-alias
+      (with-slots (table column alias) x
+	(cond
+	  (alias
+	   (format-sql-identifier alias db))
+	  (t
+	   (when table
+	     (format-sql-identifier table db)
+	     (format-char "."))
+	   (format-sql-identifier column db)))))
+    (t
+     (format-sql-syntax-node x db))))
+
 (def type sql-column-alias* ()
-  '(or string symbol sql-column-alias))
+  '(or string symbol sql-column-alias sql-function-call))
 
 (def syntax-node sql-all-columns (sql-identifier)
   ()
@@ -182,7 +200,7 @@
     :ascending
     :type (member :ascending :descending)))
   (:format-sql-syntax-node
-   (format-sql-syntax-node sort-key)
+   (format-column-reference sort-key database)
    (format-char " ")
    (ecase ordering
      (:ascending (format-string "ASC"))
