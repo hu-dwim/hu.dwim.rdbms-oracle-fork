@@ -433,7 +433,7 @@
     ;; TODO THL use cffi:with- for ptr? instead of alloc and free?
     (multiple-value-bind (ptr len ind)
         (convert-value bval btype out-position-p)
-      (with-falloc-object (handle :pointer 1 #.(cffi-sys:null-pointer))
+      (with-falloc-object (handle :pointer 1 (cffi-sys:null-pointer))
         (oci-call (oci:bind-by-pos (statement-handle-of stm)
                                    handle
                                    (error-handle-of tx)
@@ -519,14 +519,14 @@
                                      dtype
                                      nrows1
                                      0
-                                     #.(cffi-sys:null-pointer)))
+                                     (cffi-sys:null-pointer)))
   #+nil
   (dotimes (i nrows1)
     (oci-call (oci:descriptor-alloc (environment-handle-of *transaction*)
                                     (cffi:inc-pointer descpp (* nbytes1 i))
                                     dtype
                                     0
-                                    #.(cffi-sys:null-pointer))))
+                                    (cffi-sys:null-pointer))))
   (let ((envh (environment-handle-of *transaction*))
         (offset 0))
     (declare (type fixnum offset))
@@ -536,7 +536,7 @@
                                       (cffi:inc-pointer descpp offset)
                                       dtype
                                       0
-                                      #.(cffi-sys:null-pointer)))
+                                      (cffi-sys:null-pointer)))
       (incf offset #.(cffi:foreign-type-size :pointer))))
   #+nil
   (loop
@@ -547,7 +547,7 @@
                                         (cffi:inc-pointer descpp offset)
                                         dtype
                                         0
-                                        #.(cffi-sys:null-pointer)))))
+                                        (cffi-sys:null-pointer)))))
 
 (defun free-descriptors (descpp n dtype)
   (declare (optimize speed)
@@ -635,7 +635,7 @@
                             (indicators :short nrows1))
         (with-defin3r-buffer (ptr nbytes nrows1 nbytes1 typemap)
           (declare (ignore nbytes))
-          (with-falloc-object (handle :pointer 1 #.(cffi-sys:null-pointer))
+          (with-falloc-object (handle :pointer 1 (cffi-sys:null-pointer))
             (oci:define-by-pos
                 (statement-handle-of stm)
                 handle
