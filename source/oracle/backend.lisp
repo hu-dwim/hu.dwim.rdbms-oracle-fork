@@ -102,7 +102,7 @@
 
 (defun create-oci-environment (desired-encoding)
   (rdbms.debug "Setting up environment for ~A" desired-encoding)
-  (cffi:with-foreign-object (&env :pointer)
+  (with-falloc-object (&env :pointer)
     (oci-call (oci:env-create &env
 			      (logior (ecase desired-encoding
 					(:ascii 0)
@@ -119,9 +119,9 @@
 
 (defun create-connection-pool (environment dblink user password)
   (rdbms.debug "Setting up connection pool for ~A" environment)
-  (cffi:with-foreign-objects ((&pool :pointer)
-			      (&pool-name :pointer)
-			      (&pool-name-len 'oci:sb-4))
+  (with-falloc-objects ((&pool :pointer)
+                        (&pool-name :pointer)
+                        (&pool-name-len oci:sb-4))
     (handle-alloc &pool oci:+htype-cpool+)
     (let ((error-handle (error-handle-of *transaction*))
 	  (pool (cffi:mem-ref &pool :pointer)))
@@ -144,9 +144,9 @@
 
 (defun create-session-pool (env dblink username password)
   (rdbms.debug "Setting up session pool for ~A" env)
-  (cffi:with-foreign-objects ((spoolhpp :pointer)
-                              (poolName :pointer)
-                              (poolNameLen :pointer))
+  (with-falloc-objects ((spoolhpp :pointer)
+                        (poolName :pointer)
+                        (poolNameLen :pointer))
     (handle-alloc spoolhpp oci:+htype-spool+)
     (let ((errhp (error-handle-of *transaction*))
           (spoolhp (cffi:mem-ref spoolhpp :pointer)))
