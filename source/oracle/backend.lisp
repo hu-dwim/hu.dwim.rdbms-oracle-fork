@@ -86,12 +86,11 @@
 
 (def class* oci-environment ()
   (env-handle
-   (pools :initform (make-hash-table :test 'equal))))
+   (cpools :initform (make-hash-table :test 'equal))
+   (spools :initform (make-hash-table :test 'equal))))
 
-(def class* oci-pool ()
-  (pool-handle
-   pool-name
-   pool-name-len))
+(defstruct connection-pool handle name)
+(defstruct session-pool handle name)
 
 (defvar *environments* (make-hash-table))
 
@@ -119,14 +118,12 @@
 	    (create-oci-environment desired-encoding))))
 
 (defun create-connection-pool (environment dblink user password)
-  (rdbms.debug "Setting up pool for ~A" environment)
-  (cffi:with-foreign-objects ((&error-handle :pointer)
-			      (&pool :pointer)
+  (rdbms.debug "Setting up connection pool for ~A" environment)
+  (cffi:with-foreign-objects ((&pool :pointer)
 			      (&pool-name :pointer)
 			      (&pool-name-len 'oci:sb-4))
-    (handle-alloc &error-handle oci:+htype-error+)
     (handle-alloc &pool oci:+htype-cpool+)
-    (let ((error-handle (cffi:mem-ref &error-handle :pointer))
+    (let ((error-handle (error-handle-of *transaction*))
 	  (pool (cffi:mem-ref &pool :pointer)))
       (with-foreign-oci-string (dblink c-dblink l-dblink)
 	(with-foreign-oci-string (user c-user l-user)
@@ -140,53 +137,100 @@
 					 c-user l-user
 					 c-password l-password
 					 oci:+default+))))
-      (make-instance 'oci-pool
-		     :pool-handle pool
-		     :pool-name (oci-string-to-lisp
-				 (cffi:mem-ref &pool-name :pointer)
-				 (cffi:mem-ref &pool-name-len 'oci:sb-4))))))
+      (make-connection-pool :handle pool
+                            :name (oci-string-to-lisp
+                                   (cffi:mem-ref &pool-name :pointer)
+                                   (cffi:mem-ref &pool-name-len 'oci:sb-4))))))
+
+(defun create-session-pool (env dblink username password)
+  (rdbms.debug "Setting up session pool for ~A" env)
+  (cffi:with-foreign-objects ((spoolhpp :pointer)
+                              (poolName :pointer)
+                              (poolNameLen :pointer))
+    (handle-alloc spoolhpp oci:+htype-spool+)
+    (let ((errhp (error-handle-of *transaction*))
+          (spoolhp (cffi:mem-ref spoolhpp :pointer)))
+      (with-foreign-oci-string (dblink connStr connStrLen)
+        (with-foreign-oci-string (username useridp useridLen)
+          (with-foreign-oci-string (password passwordp passwordLen)
+            (oci-call
+             (oci:session-pool-create (env-handle-of env)
+                                      errhp spoolhp poolName poolNameLen
+                                      connStr connStrLen 0 100 1
+                                      useridp useridLen passwordp passwordLen
+                                      oci:+spc-homogeneous+))
+            (make-session-pool :handle (cffi:mem-ref spoolhp :pointer)
+                               :name (oci-string-to-lisp
+                                      (cffi:mem-ref poolName :pointer)
+                                      (cffi:mem-ref poolNameLen 'oci:sb-4)))))))))
 
 (defun ensure-connection-pool (environment dblink user password)
-  (let ((table (pools-of environment))
+  (let ((table (cpools-of environment))
 	(key (list dblink user password)))
     (or (gethash key table)
 	(setf (gethash key table)
 	      (create-connection-pool environment dblink user password)))))
 
-(defvar *use-connection-pool* t)
+(defun ensure-session-pool (environment dblink user password)
+  (let ((table (spools-of environment))
+	(key (list dblink user password)))
+    (or (gethash key table)
+	(setf (gethash key table)
+              (create-session-pool environment dblink user password)))))
 
 (defun set-default-lob-prefetching (value)
   (set-session-attribute OCI_ATTR_DEFAULT_LOBPREFETCH_SIZE value))
 
+(defun server-attach (datasource &optional (mode oci:+default+))
+  (with-foreign-oci-string (datasource c-datasource c-size)
+    (oci-call (oci:server-attach (server-handle-of *transaction*)
+                                 (error-handle-of *transaction*)
+                                 c-datasource
+                                 c-size
+                                 mode))))
+
+(defun get-session (envhp pool-name)
+  (let ((svchpp (service-context-handle-pointer *transaction*))
+        (errhp (error-handle-of *transaction*)))
+    (with-foreign-oci-string (pool-name poolname poolname_len)
+      (oci-call (oci:session-get envhp errhp svchpp (cffi-sys:null-pointer)
+                                 poolname poolname_len
+                                 (cffi-sys:null-pointer) 0
+                                 (cffi-sys:null-pointer) (cffi-sys:null-pointer)
+                                 (cffi-sys:null-pointer)
+                                 oci:+sessget-spool+)))))
+
 (defun logon (tx env datasource username password)
   (rdbms.debug "Logging on in transaction ~A" tx)
-  (if *use-connection-pool*
-      (server-attach-using-pool (ensure-connection-pool
-                                 env
-                                 datasource
-                                 username
-                                 password))
-      (server-attach datasource))
-  (oci-call (oci:attr-set (service-context-handle-of tx)
-                          oci:+htype-svcctx+
-                          (server-handle-of tx)
-                          0
-                          oci:+attr-server+
-                          (error-handle-of tx)))
-  (handle-alloc (session-handle-pointer tx) oci:+htype-session+)
-  (set-session-string-attribute oci:+attr-username+ username)
-  (set-session-string-attribute oci:+attr-password+ password)
-  (oci-call (oci:session-begin (service-context-handle-of tx)
-                               (error-handle-of tx)
-                               (session-handle-of tx)
-                               oci:+cred-rdbms+
-                               oci:+default+))
-  (oci-call (oci:attr-set (service-context-handle-of tx)
-                          oci:+htype-svcctx+
-                          (session-handle-of tx)
-                          0
-                          oci:+attr-session+
-                          (error-handle-of tx))))
+  (labels ((set-svcctx (handle attr)
+             (oci-call
+              (oci:attr-set (service-context-handle-of tx) oci:+htype-svcctx+
+                            handle 0 attr (error-handle-of tx))))
+           (setup-session ()
+             (set-svcctx (server-handle-of tx) oci:+attr-server+)
+             (handle-alloc (session-handle-pointer tx) oci:+htype-session+)
+             (set-session-string-attribute oci:+attr-username+ username)
+             (set-session-string-attribute oci:+attr-password+ password)
+             (oci-call (oci:session-begin (service-context-handle-of tx)
+                                          (error-handle-of tx)
+                                          (session-handle-of tx)
+                                          oci:+cred-rdbms+
+                                          oci:+default+))
+             (set-svcctx (session-handle-of tx) oci:+attr-session+)))
+    (ecase (pooling-of tx)
+      (:session
+       (get-session (env-handle-of env)
+                    (session-pool-name
+                     (ensure-session-pool env datasource username password))))
+      (:connection
+       (server-attach
+        (connection-pool-name
+         (ensure-connection-pool env datasource username password))
+        oci:+cpool+)
+       (setup-session))
+      (:none
+       (server-attach datasource)
+       (setup-session)))))
 
 (def function connect (transaction)
   (assert (not (environment-handle-pointer transaction)))
@@ -238,13 +282,24 @@
                       (return))))
       ,@body)))
 
+(defun logoff (tx)
+  (oci-call
+   (ecase (pooling-of tx)
+     (:session
+      (oci:session-release (service-context-handle-of tx)
+                           (error-handle-of tx)
+                           (cffi-sys:null-pointer)
+                           0
+                           oci:+default+))
+     ((:connection :none)
+      (oci:logoff (service-context-handle-of tx) (error-handle-of tx))))))
+
 (def function disconnect (transaction)
   (assert (environment-handle-pointer transaction))
 
   (ignore-errors*
     (rdbms.debug "Calling logoff in transaction ~A" transaction)
-    (oci-call (oci:logoff (service-context-handle-of transaction)
-                          (error-handle-of transaction))))
+    (logoff transaction))
 
   #+nil					;now global
   (ignore-errors*

@@ -14,13 +14,16 @@
 (def method transaction-mixin-class list ((db oracle))
   'oracle-transaction)
 
+(defvar *pooling* :session) ;; :session :connection :none
+
 (def class* oracle-transaction (transaction)
   ((environment-handle-pointer nil :accessor environment-handle-pointer)
    (error-handle nil :accessor error-handle-pointer)
    (server-handle nil :accessor server-handle-pointer)
    (service-context-handle nil :accessor service-context-handle-pointer)
    (session-handle nil :accessor session-handle-pointer)
-   (session-schema nil :accessor session-schema)))
+   (session-schema nil :accessor session-schema)
+   (pooling *pooling*)))
 
 (macrolet ((def (&rest names)
                `(progn
