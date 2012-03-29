@@ -205,8 +205,16 @@
 
 (defvar *falloc*)
 
-(defun call-with-falloc-object (type nbytes1 count value heap fn)
-  (assert (and (positive-fixnum-p nbytes1) (positive-fixnum-p count)))
+(defparameter *falloc-type* :bypass) ;; (member :bypass :single :pool)
+
+(defun %call-with-falloc-object/bypass (type nbytes1 count value heap fn)
+  (let ((x (cffi:foreign-alloc :uint8 :count (* nbytes1 count))))
+    (unwind-protect (funcall fn (initialize-falloc-object x 0 count value type))
+      (if heap
+          (push x *falloc*)
+          (cffi-sys:foreign-free x)))))
+
+(defun %call-with-falloc-object (type nbytes1 count value heap fn)
   (with-struct (falloc- base ht sb n maxh maxs gap) *falloc*
     (macrolet ((check ()
                  `(progn
@@ -240,6 +248,14 @@
                 (check)
                 (setq sb x)
                 (check))))))))
+
+(defun call-with-falloc-object (type nbytes1 count value heap fn)
+  (assert (and (positive-fixnum-p nbytes1) (positive-fixnum-p count)))
+  (ecase *falloc-type*
+    (:bypass
+     (%call-with-falloc-object/bypass type nbytes1 count value heap fn))
+    ((:single :pool)
+     (%call-with-falloc-object type nbytes1 count value heap fn))))
 
 (defmacro with-falloc-object ((var type &optional (count 1) value heap) &body body)
   `(call-with-falloc-object ',type ,(cffi:foreign-type-size type) ,count ,value
@@ -295,13 +311,22 @@
       (oci:ub-4 (expand oci:ub-4))
       (oci:date (expand oci:date)))))
 
+(defun %call-with-falloc/bypass (fn)
+  (let ((*falloc* nil))
+    (unwind-protect (funcall fn)
+      (mapc 'cffi:foreign-free *falloc*))))
+
 (defparameter *falloc-size* (* 10 (expt 1024 2)))
+
+(defun %call-with-falloc/single (fn)
+  (let ((*falloc* (reset-falloc (make-falloc *falloc-size*))))
+    (unwind-protect (funcall fn)
+      (free-falloc *falloc*))))
 
 (defvar *falloc-pool* nil)
 (defvar *falloc-pool-lock* (bordeaux-threads:make-lock))
 
-(defun call-with-falloc (fn)
-  (assert (not (boundp '*falloc*)))
+(defun %call-with-falloc/pool (fn)
   (let ((*falloc* (reset-falloc
                    (or (bordeaux-threads:with-lock-held (*falloc-pool-lock*)
                          (pop *falloc-pool*))
@@ -309,6 +334,14 @@
     (unwind-protect (funcall fn)
       (bordeaux-threads:with-lock-held (*falloc-pool-lock*)
         (push *falloc* *falloc-pool*)))))
+
+(defun call-with-falloc (fn)
+  (assert (not (boundp '*falloc*)))
+  (let ((*falloc-type* *falloc-type*))
+    (ecase *falloc-type*
+      (:bypass (%call-with-falloc/bypass fn))
+      (:single (%call-with-falloc/single fn))
+      (:pool (%call-with-falloc/pool fn)))))
 
 (defmacro with-falloc (() &body body)
   `(call-with-falloc (lambda () ,@body)))
