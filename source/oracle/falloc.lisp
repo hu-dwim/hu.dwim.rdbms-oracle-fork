@@ -22,14 +22,8 @@
   (maxs 0 :type fixnum)
   (gap 0 :type fixnum))
 
-(cffi:defcfun "malloc" :pointer
-  (nbytes oci:size-t))
-
-(cffi:defcfun "free" :void
-  (ptr :pointer))
-
 (defun make-falloc (nbytes)
-  (%make-falloc :base (malloc nbytes) #+nil(cffi:foreign-alloc :uint8 :count nbytes)
+  (%make-falloc :base (cffi:foreign-alloc :uint8 :count nbytes)
                 :ht 0
                 :sb nbytes
                 :n nbytes
@@ -38,7 +32,7 @@
                 :gap nbytes))
 
 (defun free-falloc (x)
-  (free #+nil cffi-sys:foreign-free (falloc-base x)))
+  (cffi-sys:foreign-free (falloc-base x)))
 
 ;; http://lambda-the-ultimate.org/node/1997#comment-24650
 (defmacro with-struct ((conc-name &rest names) obj &body body)
