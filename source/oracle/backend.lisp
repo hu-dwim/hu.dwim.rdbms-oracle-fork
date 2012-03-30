@@ -899,11 +899,8 @@
 (defun download-lobs-using-callback (locators n &optional csid)
   (let* ((svchp (service-context-handle-of *transaction*))
          (errhp (error-handle-of *transaction*))
-         (siz #.(* 8 8 1024 #+nil(lob-chunk-size svchp errhp (cffi:mem-aref locators :pointer))))
-         (*download-lobs-buffer* (make-array siz
-                                             :element-type '(unsigned-byte 8)
-                                             :adjustable t
-                                             :fill-pointer 0)))
+         (siz (car (array-dimensions *download-lobs-buffer*))))
+    (setf (fill-pointer *download-lobs-buffer*) 0)
     (with-falloc-objects ((bamtp oci:oraub-8 n 0)
                           (camtp oci:oraub-8 n 0)
                           (offp oci:oraub-8 n 1)
@@ -959,7 +956,12 @@
   (with-defin3rs (d tx stm nrows1)
     (when (plusp (length d))
       (do (z
-           (nrows 0))
+           (nrows 0)
+           (*download-lobs-buffer*
+            (make-array #.(expt 2 16) ;; multiple of lob-chunk-size
+                        :element-type '(unsigned-byte 8)
+                        :adjustable t
+                        :fill-pointer 0)))
           ((not (let ((more (stmt-fetch-2 stm nrows1 oci:+fetch-next+ 0))
                       (n (attr-rows-fetched stm)))
                   (when (plusp n)
