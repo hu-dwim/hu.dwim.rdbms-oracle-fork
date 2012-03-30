@@ -193,12 +193,19 @@
 (def function stmt-fetch-next (statement number-of-rows)
   (stmt-fetch-2 statement number-of-rows oci:+fetch-next+ 0))
 
-(def function handle-alloc (handle-ptr handle-type)
+;;(defparameter *handle-stat* (list 26 0 27 0 9 0 2 0 8 0 3 0 4 0))
+
+(defun handle-alloc (ptr type)
+  ;;(incf (getf *handle-stat* type))
   (oci-call (oci:handle-alloc (environment-handle-of *transaction*)
-                              handle-ptr
-                              handle-type
+                              ptr
+                              type
                               0
                               (cffi:null-pointer))))
+
+(defun handle-free (handle type)
+  ;;(decf (getf *handle-stat* type))
+  (oci-call (oci:handle-free handle type)))
 
 (def function dump-c-byte-array (ptr size)
   (with-output-to-string (s)

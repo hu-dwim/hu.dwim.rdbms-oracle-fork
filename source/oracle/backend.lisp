@@ -97,7 +97,7 @@
 (defun flush-environments (&key do-not-free)
   (iter (for (key env) in-hashtable *environments*)
 	(unless do-not-free
-	  (oci-call (oci:handle-free (env-handle-of env) oci:+htype-env+)))
+	  (handle-free (env-handle-of env) oci:+htype-env+))
 	(remhash key *environments*)))
 
 (defun create-oci-environment (desired-encoding)
@@ -237,49 +237,43 @@
     (setf (cffi:mem-aref x '(:pointer :void) 0) (cffi-sys:null-pointer))
     x))
 
-(defun connect (transaction)
-  (assert (not (environment-handle-pointer transaction)))
-  (assert (not (error-handle transaction)))
-  (assert (not (server-handle transaction)))
-  (assert (not (service-context-handle transaction)))
-  (assert (not (session-handle transaction)))
+(defun connect (tx)
+  (assert (not (environment-handle-pointer tx)))
+  (assert (not (error-handle-pointer tx)))
+  (assert (not (server-handle-pointer tx)))
+  (assert (not (service-context-handle-pointer tx)))
+  (assert (not (session-handle-pointer tx)))
   (ensure-oracle-oci-is-loaded)
-  (bind ((environment (ensure-oci-environment
-		       (connection-encoding-of (database-of *transaction*))))
-	 ((&key datasource user-name (password "") schema) (connection-specification-of (database-of transaction))))
-    (macrolet ((alloc (&rest whats)
-                 `(progn
-                   ,@(loop for what :in whats
-                           for accessor = (format-symbol (find-package :hu.dwim.rdbms.oracle) "~A-POINTER" what)
-                           collect `(setf (,accessor transaction)
-                                     (make-void-pointer))))))
-      (alloc
-       environment-handle
-       error-handle
-       server-handle
-       service-context-handle
-       session-handle))
+  (bind ((db (database-of tx))
+         (environment (ensure-oci-environment (connection-encoding-of db)))
+	 ((&key datasource user-name (password "") schema)
+          (connection-specification-of db)))
 
-    (setf (cffi:mem-ref (environment-handle-pointer transaction) :pointer)
+    (setf (environment-handle-pointer tx) (make-void-pointer))
+    (setf (error-handle-pointer tx) (make-void-pointer))
+    (setf (server-handle-pointer tx) (make-void-pointer))
+    (setf (service-context-handle-pointer tx) (make-void-pointer))
+    (setf (session-handle-pointer tx) (make-void-pointer))
+
+    (setf (cffi:mem-ref (environment-handle-pointer tx) :pointer)
 	  (env-handle-of environment))
 
-    (rdbms.debug "Connecting in transaction ~A" transaction)
-    (handle-alloc (error-handle-pointer transaction) oci:+htype-error+)
-    (handle-alloc (server-handle-pointer transaction) oci:+htype-server+)
-    (handle-alloc (service-context-handle-pointer transaction) oci:+htype-svcctx+)
+    (handle-alloc (error-handle-pointer tx) oci:+htype-error+)
+    (handle-alloc (server-handle-pointer tx) oci:+htype-server+)
+    (handle-alloc (service-context-handle-pointer tx) oci:+htype-svcctx+)
 
     (iter connecting
           (with-simple-restart (retry "Retry connecting to Oracle")
-            (logon transaction environment datasource user-name password)
+            (logon tx environment datasource user-name password)
             (return-from connecting))
-          (unless (cffi:null-pointer-p (session-handle-of transaction))
-            (oci-call (oci:handle-free (session-handle-of transaction) oci:+htype-session+))
-            (setf (session-handle-of transaction) (cffi:null-pointer))))
+          (unless (cffi:null-pointer-p (session-handle-of tx))
+            (handle-free (session-handle-of tx) oci:+htype-session+)
+            (setf (session-handle-of tx) (cffi:null-pointer))))
     ;;(set-default-lob-prefetching #.(* 1024 1024))
     (when schema
-      (setf (session-schema transaction) schema)
-      (execute-command (database-of transaction)
-		       transaction
+      (setf (session-schema tx) schema)
+      (execute-command (database-of tx)
+		       tx
 		       (format nil "ALTER SESSION SET CURRENT_SCHEMA=~A"
 			       schema)))))
 
@@ -291,8 +285,13 @@
                       (return))))
       ,@body)))
 
-(defun logoff (tx)
-  (oci-call
+(defun disconnect (tx)
+  (assert (environment-handle-pointer tx))
+  (assert (error-handle-pointer tx))
+  (assert (server-handle-pointer tx))
+  (assert (service-context-handle-pointer tx))
+  (assert (session-handle-pointer tx))
+  (oci-call ;; logoff
    (ecase (pooling-of tx)
      (:session
       (oci:session-release (service-context-handle-of tx)
@@ -301,33 +300,22 @@
                            0
                            oci:+default+))
      ((:connection :none)
-      (oci:logoff (service-context-handle-of tx) (error-handle-of tx))))))
-
-(def function disconnect (transaction)
-  (assert (environment-handle-pointer transaction))
-
-  (ignore-errors*
-    (rdbms.debug "Calling logoff in transaction ~A" transaction)
-    (logoff transaction))
-
-  #+nil					;now global
-  (ignore-errors*
-    (rdbms.debug "Freeing environment handle of transaction ~A" transaction)
-    (oci-call (oci:handle-free (environment-handle-of transaction) oci:+htype-env+)))
-
-  (macrolet ((dealloc (&rest whats)
-               `(progn
-                 ,@(loop for what in whats
-                         for accessor = (format-symbol (find-package :hu.dwim.rdbms.oracle) "~A-POINTER" what)
-                         collect `(awhen (,accessor transaction)
-                                   (cffi:foreign-free it)
-                                   (setf (,accessor transaction) nil))))))
-    (dealloc
-     environment-handle
-     error-handle
-     server-handle
-     service-context-handle
-     session-handle)))
+      (oci:logoff (service-context-handle-of tx) (error-handle-of tx)))))
+  ;;(handle-free (session-handle-of tx) oci:+htype-session+) ;; invalid
+  ;;(handle-free (service-context-handle-of tx) oci:+htype-svcctx+) ;; segfault
+  (handle-free (server-handle-of tx) oci:+htype-server+)
+  (handle-free (error-handle-of tx) oci:+htype-error+)
+  ;;(handle-free (environment-handle-of tx)) ;; global
+  (cffi:foreign-free (environment-handle-pointer tx))
+  (cffi:foreign-free (error-handle-pointer tx))
+  (cffi:foreign-free (server-handle-pointer tx))
+  (cffi:foreign-free (service-context-handle-pointer tx))
+  (cffi:foreign-free (session-handle-pointer tx))
+  (setf (environment-handle-pointer tx) nil
+        (error-handle-pointer tx) nil
+        (server-handle-pointer tx) nil
+        (service-context-handle-pointer tx) nil
+        (session-handle-pointer tx) nil))
 
 ;;;;;;
 ;;; Prepared statement
@@ -342,8 +330,8 @@
     (rdbms.dribble "Statement is allocated")
     statement))
 
-(def function free-prepared-statement (statement)
-  (oci-call (oci:handle-free (statement-handle-of statement) oci:+htype-stmt+))
+(defun free-prepared-statement (statement)
+  (handle-free (statement-handle-of statement) oci:+htype-stmt+)
   (cffi:foreign-free (statement-handle-pointer statement)))
 
 ;;; When executing a prepared statement, there are:
