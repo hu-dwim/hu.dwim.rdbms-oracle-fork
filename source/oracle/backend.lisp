@@ -232,8 +232,17 @@
        (server-attach datasource)
        (setup-session)))))
 
-(def function connect (transaction)
+(defun make-void-pointer ()
+  (let ((x (cffi:foreign-alloc '(:pointer :void))))
+    (setf (cffi:mem-aref x '(:pointer :void) 0) (cffi-sys:null-pointer))
+    x))
+
+(defun connect (transaction)
   (assert (not (environment-handle-pointer transaction)))
+  (assert (not (error-handle transaction)))
+  (assert (not (server-handle transaction)))
+  (assert (not (service-context-handle transaction)))
+  (assert (not (session-handle transaction)))
   (ensure-oracle-oci-is-loaded)
   (bind ((environment (ensure-oci-environment
 		       (connection-encoding-of (database-of *transaction*))))
@@ -314,7 +323,7 @@
                                    (cffi:foreign-free it)
                                    (setf (,accessor transaction) nil))))))
     (dealloc
-     #+nil environment-handle		;now global
+     environment-handle
      error-handle
      server-handle
      service-context-handle
@@ -323,7 +332,7 @@
 ;;;;;;
 ;;; Prepared statement
 
-(def function make-prepared-statement (command &optional (name ""))
+(defun make-prepared-statement (command &optional (name ""))
   (let ((statement (make-instance 'oracle-prepared-statement
                                   :name name
                                   :statement-handle-pointer (make-void-pointer)

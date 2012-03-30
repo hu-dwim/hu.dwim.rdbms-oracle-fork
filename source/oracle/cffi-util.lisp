@@ -6,16 +6,6 @@
 
 (in-package :hu.dwim.rdbms.oracle)
 
-;; cffi does not inline foreign-alloc with :initial-element, with
-;; _disastrous_ consequences for performance.  Here's the workaround:
-(defmacro foreign-alloc-with-initial-element (type initial-element)
-  `(let ((ptr (cffi:foreign-alloc ,type)))
-     (setf (cffi:mem-aref ptr ,type 0) ,initial-element)
-     ptr))
-
-(defun make-void-pointer ()
-  (foreign-alloc-with-initial-element '(:pointer :void) (cffi:null-pointer)))
-
 (def special-variable *default-oci-flags* (logior oci:+threaded+ oci:+new-length-semantics+))
 
 ;;; helpers to access foreign stuff
