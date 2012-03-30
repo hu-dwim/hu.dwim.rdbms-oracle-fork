@@ -361,7 +361,7 @@
 
 ;;; binders
 
-(defun alloc-indicator (is-null)
+(defun falloc-indicator (is-null)
   (heap-falloc 'oci:sb-2 1 (if is-null -1 0)))
 
 (defun is-null-p (bval btype)
@@ -375,13 +375,13 @@
      (values (cffi:null-pointer) #.(* 1024 1024) (cffi:null-pointer))) ;; feel free to use other max size
     ((and out-variable-p (lob-type-p btype))
      (multiple-value-bind (ptr len) (make-lob-locator-indirect (equalp #() bval))
-       (values ptr len (alloc-indicator (is-null-p bval btype)))))
+       (values ptr len (falloc-indicator (is-null-p bval btype)))))
     ((is-null-p bval btype)
-     (values (cffi:null-pointer) 0 (alloc-indicator t)))
+     (values (cffi:null-pointer) 0 (falloc-indicator t)))
     (t
      (multiple-value-bind (ptr len)
          (funcall (typemap-lisp-to-oci (typemap-for-sql-type btype)) bval)
-       (values ptr len (alloc-indicator nil))))))
+       (values ptr len (falloc-indicator nil))))))
 
 ;;; nbatch stuff
 
