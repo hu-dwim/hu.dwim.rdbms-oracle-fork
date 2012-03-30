@@ -232,6 +232,7 @@
   (:format-sql-syntax-node
    (format-string "EMPTY_BLOB()")))
 
+#+nil
 (def function sql-unquote-binding-types (sql-unquote database) ;; TODO THL use or remove
   (bind ((*print-pretty* nil)
          (*print-circle* nil)
