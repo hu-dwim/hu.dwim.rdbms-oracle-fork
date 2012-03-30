@@ -372,7 +372,7 @@
 (defun convert-value (bval btype out-variable-p)
   (cond
     ((consp bval) ;; nbatch, data allocated dynamically later
-     (values (cffi:null-pointer) #.(* 1024 1024) null)) ;; feel free to use other max size
+     (values (cffi:null-pointer) #.(* 1024 1024) (cffi:null-pointer))) ;; feel free to use other max size
     ((and out-variable-p (lob-type-p btype))
      (multiple-value-bind (ptr len) (make-lob-locator-indirect (equalp #() bval))
        (values ptr len (alloc-indicator (is-null-p bval btype)))))
