@@ -366,18 +366,50 @@
       (and (not bval)
            (not (typep btype 'sql-boolean-type)))))
 
+(defvar *convert-value-alloc-lob*)
+(defvar *convert-value-alloc-timestamp*)
+(defvar *convert-value-alloc-timestamp-tz*)
+
+(defun call-with-convert-value-alloc (fn)
+  (assert (not (boundp '*convert-value-alloc-lob*)))
+  (assert (not (boundp '*convert-value-alloc-timestamp*)))
+  (assert (not (boundp '*convert-value-alloc-timestamp-tz*)))
+  (let ((*convert-value-alloc-lob* nil)
+        (*convert-value-alloc-timestamp* nil)
+        (*convert-value-alloc-timestamp-tz* nil))
+    (unwind-protect (funcall fn)
+      (mapc (lambda (x)
+              (descriptor-free (cffi:mem-ref x :pointer) #.oci:+dtype-lob+))
+            *convert-value-alloc-lob*)
+      (mapc (lambda (x)
+              (descriptor-free (cffi:mem-ref x :pointer) #.oci:+dtype-timestamp+))
+            *convert-value-alloc-timestamp*)
+      (mapc (lambda (x)
+              (descriptor-free (cffi:mem-ref x :pointer) #.oci:+dtype-timestamp-tz+))
+            *convert-value-alloc-timestamp-tz*))))
+
+(defmacro with-convert-value-alloc (() &body body)
+  `(call-with-convert-value-alloc (lambda () ,@body)))
+
 (defun convert-value (bval btype out-variable-p)
   (cond
     ((consp bval) ;; nbatch, data allocated dynamically later
      (values (cffi:null-pointer) #.(* 1024 1024) (cffi:null-pointer))) ;; feel free to use other max size
     ((and out-variable-p (lob-type-p btype))
-     (multiple-value-bind (ptr len) (make-lob-locator-indirect (equalp #() bval))
+     (multiple-value-bind (ptr len dtype)
+         (make-lob-locator-indirect (equalp #() bval))
+       (ecase dtype
+         (#.oci:+dtype-lob+ (push ptr *convert-value-alloc-lob*)))
        (values ptr len (falloc-indicator (is-null-p bval btype)))))
     ((is-null-p bval btype)
      (values (cffi:null-pointer) 0 (falloc-indicator t)))
     (t
-     (multiple-value-bind (ptr len)
+     (multiple-value-bind (ptr len dtype)
          (funcall (typemap-lisp-to-oci (typemap-for-sql-type btype)) bval)
+       (when dtype
+         (ecase dtype
+           (#.oci:+dtype-timestamp+ (push ptr *convert-value-alloc-timestamp*))
+           (#.oci:+dtype-timestamp-tz+ (push ptr *convert-value-alloc-timestamp-tz*))))
        (values ptr len (falloc-indicator nil))))))
 
 ;;; nbatch stuff
@@ -388,12 +420,6 @@
 (defvar *dynamic-binding-values*)
 (defvar *dynamic-binding-types*)
 (defvar *dynamic-binding-locators*)
-
-(defvar *convert-value-alloc-lob*)
-
-(defun free-later-lob (x)
-  (push x *convert-value-alloc-lob*)
-  x)
 
 (defun out-position-p (pos0)
   (when *first-out-position*
@@ -406,18 +432,13 @@
          (sql-type (elt *dynamic-binding-types* pos0)))
     (multiple-value-bind (ptr len ind)
         (convert-value value sql-type (out-position-p pos0))
-      (if (and (lob-type-p sql-type)
-               (not (cffi-sys:null-pointer-p ptr)))
-          (let ((locator (cffi:mem-ref ptr :pointer)))
-            (free-later-lob locator)
-            (setf (cffi:mem-ref bufpp :pointer) locator
-                  (cffi:mem-ref alenp 'oci:ub-4) len
-                  (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
-                  (cffi:mem-ref indpp :pointer) ind))
-          (setf (cffi:mem-ref bufpp :pointer) ptr
-                (cffi:mem-ref alenp 'oci:ub-4) len
-                (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
-                (cffi:mem-ref indpp :pointer) ind))))
+      (setf (cffi:mem-ref bufpp :pointer) (if (and (lob-type-p sql-type)
+                                                   (not (cffi-sys:null-pointer-p ptr)))
+                                              (cffi:mem-ref ptr :pointer)
+                                              ptr)
+            (cffi:mem-ref alenp 'oci:ub-4) len
+            (cffi:mem-ref piecep 'oci:ub-1) oci:+one-piece+
+            (cffi:mem-ref indpp :pointer) ind)))
   oci:+continue+)
 
 (cffi:defcallback bind-dynamic-in-cb oci:sb-4 ((ictxp :pointer) ;; dvoid*
@@ -439,7 +460,6 @@
     (multiple-value-bind (ptr len ind)
         (convert-value value sql-type t)
       (let ((locator (cffi:mem-ref ptr :pointer)))
-        (free-later-lob locator)
         (push locator (aref *dynamic-binding-locators* pos0))
         (setf (cffi:mem-ref bufpp :pointer) locator
               (cffi:mem-ref (cffi:mem-ref alenp :pointer) 'oci:ub-4) len
@@ -501,18 +521,13 @@
                                    (if nbatch
                                        oci:+data-at-exec+
                                        *default-oci-flags*)))
-        (cond
-          (nbatch
-           (oci-call (oci:bind-dynamic (cffi:mem-ref handle :pointer)
-                                       (error-handle-of tx)
-                                       (cffi-sys:make-pointer pos0)
-                                       (cffi:callback bind-dynamic-in-cb)
-                                       (cffi-sys:make-pointer pos0)
-                                       (cffi:callback bind-dynamic-out-cb))))
-          (t
-           (when (and (lob-type-p btype)
-                      (not (cffi-sys:null-pointer-p ptr)))
-             (free-later-lob (cffi:mem-ref ptr :pointer)))))
+        (when nbatch
+          (oci-call (oci:bind-dynamic (cffi:mem-ref handle :pointer)
+                                      (error-handle-of tx)
+                                      (cffi-sys:make-pointer pos0)
+                                      (cffi:callback bind-dynamic-in-cb)
+                                      (cffi-sys:make-pointer pos0)
+                                      (cffi:callback bind-dynamic-out-cb))))
         (prog1 (funcall fn)
           (when (and out-position-p (lob-type-p btype))
             (cond
@@ -574,32 +589,18 @@
                                      (cffi-sys:null-pointer)))
   #+nil
   (dotimes (i nrows1)
-    (oci-call (oci:descriptor-alloc (environment-handle-of *transaction*)
-                                    (cffi:inc-pointer descpp (* nbytes1 i))
-                                    dtype
-                                    0
-                                    (cffi-sys:null-pointer))))
-  (let ((envh (environment-handle-of *transaction*))
-        (offset 0))
+    (descriptor-alloc (cffi:inc-pointer descpp (* nbytes1 i)) dtype))
+  (let ((offset 0))
     (declare (type fixnum offset))
     (dotimes (i n)
       ;;(declare (type fixnum i))
-      (oci-call (oci:descriptor-alloc envh
-                                      (cffi:inc-pointer descpp offset)
-                                      dtype
-                                      0
-                                      (cffi-sys:null-pointer)))
+      (descriptor-alloc (cffi:inc-pointer descpp offset) dtype)
       (incf offset #.(cffi:foreign-type-size :pointer))))
   #+nil
   (loop
-     with envh = (environment-handle-of *transaction*)
      for i from 0 below n
      for offset from 0 by #.(cffi:foreign-type-size :pointer)
-     do (oci-call (oci:descriptor-alloc envh
-                                        (cffi:inc-pointer descpp offset)
-                                        dtype
-                                        0
-                                        (cffi-sys:null-pointer)))))
+     do (descriptor-alloc (cffi:inc-pointer descpp offset) dtype)))
 
 (defun free-descriptors (descpp n dtype)
   (declare (optimize speed)
@@ -610,10 +611,9 @@
     (declare (type fixnum offset))
     (dotimes (i n)
       ;;(declare (type fixnum i))
-      (oci-call
-       (oci:descriptor-free #-allegro(cffi:mem-aref descpp :pointer i)
-                            #+allegro(system:memref-int descpp offset 0 :unsigned-long)
-                            dtype))
+      (descriptor-free #-allegro(cffi:mem-aref descpp :pointer i)
+                       #+allegro(system:memref-int descpp offset 0 :unsigned-long)
+                       dtype)
       (incf offset #.(cffi:foreign-type-size :pointer)))))
 
 (defun call-with-defin3r-buffer (nrows1 nbytes1 typemap fn)
@@ -966,7 +966,6 @@
 (defun execute-prepared-statement (tx stm btypes bvalues visitor result-type out-position)
   ;; TODO THL configurable prefetching limits?
   ;;(set-row-prefetching stm 1000000 #.(* 10 (expt 2 20)))
-  ;; execute
   (let* ((nbatch (when bvalues
                    (let ((u (remove-duplicates
                              (loop
@@ -980,12 +979,10 @@
          (*dynamic-binding-values* bvalues)
          (*dynamic-binding-types* btypes)
          (*dynamic-binding-locators*
-          (and nbatch (make-array (length btypes) :initial-element nil)))
-         (*convert-value-alloc-lob* nil))
-    (unwind-protect
-         (with-binders (stm tx btypes bvalues nbatch)
-           (stmt-execute stm *default-oci-flags* nbatch))
-      (mapc 'free-oci-lob-locator *convert-value-alloc-lob*)))
+          (and nbatch (make-array (length btypes) :initial-element nil))))
+    (with-convert-value-alloc ()
+      (with-binders (stm tx btypes bvalues nbatch)
+        (stmt-execute stm *default-oci-flags* nbatch))))
   (values
    (fetch-rows tx stm
                (make-collector visitor result-type)

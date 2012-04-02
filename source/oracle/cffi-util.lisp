@@ -213,44 +213,32 @@
                                do (format s "~2,'0X "
                                           (cffi:mem-ref ptr :uint8 i)))))
 
-(def function descriptor-alloc (descriptor-ptr-ptr descriptor-type)
+;;(defparameter *descriptor-stat* (list 50 0 68 0 69 0))
+
+(defun descriptor-alloc (ptr type)
+  ;;(incf (getf *descriptor-stat* type))
   (oci-call (oci:descriptor-alloc (environment-handle-of *transaction*)
-                                  descriptor-ptr-ptr
-                                  descriptor-type
+                                  ptr
+                                  type
                                   0
                                   (cffi:null-pointer))))
 
-(def function allocate-oci-lob-locator (descriptor-ptr-ptr)
-  (descriptor-alloc descriptor-ptr-ptr oci:+dtype-lob+))
-
-(def function descriptor-free (descriptor-ptr descriptor-type)
-  (oci-call (oci:descriptor-free descriptor-ptr
-                                 descriptor-type)))
-
-(def function free-oci-lob-locator (descriptor-ptr)
-  (descriptor-free descriptor-ptr oci:+dtype-lob+))
-
-(def function set-empty-lob (locator)
-  (with-falloc-object (attribute oci:ub-4 1 0)
-    (oci-call (oci:attr-set locator
-                            oci:+dtype-lob+
-                            attribute
-                            0
-                            oci:+attr-lobempty+
-                            (error-handle-of *transaction*)))))
-
-(def function make-lob-locator (&optional empty)
-  (with-falloc-object (descriptor-ptr-ptr :pointer)
-    (allocate-oci-lob-locator descriptor-ptr-ptr)
-    (let ((locator (cffi:mem-aref descriptor-ptr-ptr :pointer)))
-      (when empty
-        (set-empty-lob locator))
-      (values locator #.(cffi:foreign-type-size :pointer)))))
+(defun descriptor-free (x type)
+  ;;(decf (getf *descriptor-stat* type))
+  (oci-call (oci:descriptor-free x type)))
 
 (defun make-lob-locator-indirect (&optional empty)
-  (values
-   (heap-falloc :pointer 1 (make-lob-locator empty))
-   #.(cffi:foreign-type-size :pointer)))
+  (let ((descpp (heap-falloc :pointer)))
+    (descriptor-alloc descpp oci:+dtype-lob+)
+    (when empty
+      (with-falloc-object (attribute oci:ub-4 1 0)
+        (oci-call (oci:attr-set (cffi:mem-aref descpp :pointer)
+                                oci:+dtype-lob+
+                                attribute
+                                0
+                                oci:+attr-lobempty+
+                                (error-handle-of *transaction*)))))
+    (values descpp #.(cffi:foreign-type-size :pointer) oci:+dtype-lob+)))
 
 (def function clob-type-p (sql-type)
   (typep sql-type 'sql-character-large-object-type))

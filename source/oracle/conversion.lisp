@@ -373,13 +373,9 @@
   (local-time-to-timestamp timestamp))
 
 ;; TODO rename to something like to-oracle-timestamp
-(def function local-time-to-timestamp (timestamp)
+(defun local-time-to-timestamp (timestamp)
   (bind ((oci-date-time-pointer (heap-falloc :pointer)))
-    (oci-call (oci:descriptor-alloc (environment-handle-of *transaction*)
-                                    oci-date-time-pointer
-                                    oci:+dtype-timestamp+
-                                    0
-                                    (cffi:null-pointer)))
+    (descriptor-alloc oci-date-time-pointer oci:+dtype-timestamp+)
     (with-decoded-timestamp (:nsec nsec :sec ss :minute mm :hour hh :day day :month month :year year :timezone +utc-zone+)
         timestamp
       (oci-call (oci:date-time-construct (environment-handle-of *transaction*)
@@ -394,7 +390,7 @@
                                          nsec
                                          (cffi:null-pointer)
                                          0)))
-    (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer))))
+    (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer) oci:+dtype-timestamp+)))
 
 (def function local-time-from-timestamp (ptr len)
   (assert (= #.(cffi:foreign-type-size :pointer) len))
@@ -431,17 +427,13 @@
                          (cffi:mem-ref year 'oci:sb-2)
                          :timezone +utc-zone+)))))
 
-(def function local-time-to-timestamp-tz (timestamp)
+(defun local-time-to-timestamp-tz (timestamp)
   (let ((environment-handle (environment-handle-of *transaction*))
         (error-handle (error-handle-of *transaction*))
         (oci-date-time-pointer (heap-falloc :pointer))
         ;; TODO this is broken here
         (timezone-str (timezone-as-HHMM-string timestamp)))
-    (oci-call (oci:descriptor-alloc environment-handle
-                                    oci-date-time-pointer
-                                    oci:+dtype-timestamp-tz+
-                                    0
-                                    (cffi:null-pointer)))
+    (descriptor-alloc oci-date-time-pointer oci:+dtype-timestamp-tz+)
     (with-decoded-timestamp (:nsec nsec :sec ss :minute mm :hour hh :day day :month month :year year :timezone +utc-zone+)
         timestamp
       (with-foreign-oci-string (timezone-str c-timezone-ptr c-timezone-size)
@@ -457,7 +449,7 @@
                                            nsec
                                            c-timezone-ptr
                                            c-timezone-size))))
-    (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer))))
+    (values oci-date-time-pointer #.(cffi:foreign-type-size :pointer) oci:+dtype-timestamp-tz+)))
 
 (def function local-time-from-timestamp-tz (ptr len)
   (declare (ignore len))
