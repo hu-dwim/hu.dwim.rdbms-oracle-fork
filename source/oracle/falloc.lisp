@@ -205,7 +205,7 @@
 
 (defvar *falloc*)
 
-(defparameter *falloc-type* :bypass) ;; (member :bypass :single :pool)
+(defparameter *falloc-type* :pool) ;; :bypass :single :pool
 
 (defun %call-with-falloc-object/bypass (type nbytes1 count value heap fn)
   (let ((x (cffi:foreign-alloc :uint8 :count (* nbytes1 count))))
