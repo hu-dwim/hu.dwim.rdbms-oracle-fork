@@ -303,7 +303,10 @@
       (oci:logoff (service-context-handle-of tx) (error-handle-of tx)))))
   ;;(handle-free (session-handle-of tx) oci:+htype-session+) ;; invalid
   ;;(handle-free (service-context-handle-of tx) oci:+htype-svcctx+) ;; segfault
-  (handle-free (server-handle-of tx) oci:+htype-server+)
+  (ecase (pooling-of tx)
+    (:session
+     (handle-free (server-handle-of tx) oci:+htype-server+))
+    ((:connection :none))) ;; invalid
   (handle-free (error-handle-of tx) oci:+htype-error+)
   ;;(handle-free (environment-handle-of tx)) ;; global
   (cffi:foreign-free (environment-handle-pointer tx))
