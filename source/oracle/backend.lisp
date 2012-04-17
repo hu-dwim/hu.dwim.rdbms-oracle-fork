@@ -53,6 +53,15 @@
   (rdbms.debug "Preparing command: ~S" command)
   (make-prepared-statement command))
 
+(defun %execute-command
+    (database transaction command
+     &optional visitor binding-types binding-values (result-type 'vector)
+               out-position)
+  (let ((statement (prepare-command database transaction command)))
+    (unwind-protect
+	 (execute-prepared-statement transaction statement binding-types binding-values visitor result-type out-position)
+      (free-prepared-statement statement))))
+
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
                             (command string)
@@ -60,10 +69,8 @@
                             &allow-other-keys)
   (rdbms.debug "Executing ~S" command)
   (with-falloc ()
-    (let ((statement (prepare-command database transaction command)))
-      (unwind-protect
-           (execute-prepared-statement transaction statement binding-types binding-values visitor result-type out-position)
-        (free-prepared-statement statement)))))
+    (%execute-command database transaction command visitor binding-types
+		      binding-values result-type out-position)))
 
 (def method execute-command ((database oracle)
                             (transaction oracle-transaction)
@@ -272,10 +279,10 @@
     ;;(set-default-lob-prefetching #.(* 1024 1024))
     (when schema
       (setf (session-schema tx) schema)
-      (execute-command (database-of tx)
-		       tx
-		       (format nil "ALTER SESSION SET CURRENT_SCHEMA=~A"
-			       schema)))))
+      (%execute-command (database-of tx)
+			tx
+			(format nil "ALTER SESSION SET CURRENT_SCHEMA=~A"
+				schema)))))
 
 (def macro ignore-errors* (&body body)
   `(block nil
