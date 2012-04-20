@@ -59,6 +59,7 @@
                             &key visitor binding-types binding-values result-type out-position
                             &allow-other-keys)
   (rdbms.debug "Executing ~S" command)
+  (ensure-connected transaction)
   (with-falloc ()
     (let ((statement (prepare-command database transaction command)))
       (unwind-protect
@@ -238,6 +239,16 @@
     x))
 
 (defun connect (tx)
+  (let ((schema (with-falloc ()
+		  (%connect tx))))
+    (when schema
+      (setf (session-schema tx) schema)
+      (execute-command (database-of tx)
+		       tx
+		       (format nil "ALTER SESSION SET CURRENT_SCHEMA=~A"
+			       schema)))))
+
+(defun %connect (tx)
   (assert (not (environment-handle-pointer tx)))
   (assert (not (error-handle-pointer tx)))
   (assert (not (server-handle-pointer tx)))
@@ -270,12 +281,7 @@
             (handle-free (session-handle-of tx) oci:+htype-session+)
             (setf (session-handle-of tx) (cffi:null-pointer))))
     ;;(set-default-lob-prefetching #.(* 1024 1024))
-    (when schema
-      (setf (session-schema tx) schema)
-      (execute-command (database-of tx)
-		       tx
-		       (format nil "ALTER SESSION SET CURRENT_SCHEMA=~A"
-			       schema)))))
+    schema))
 
 (def macro ignore-errors* (&body body)
   `(block nil
