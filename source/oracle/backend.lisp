@@ -246,7 +246,8 @@
       (execute-command (database-of tx)
 		       tx
 		       (format nil "ALTER SESSION SET CURRENT_SCHEMA=~A"
-			       schema)))))
+			       schema)))
+    (call-post-connect-hook tx)))
 
 (defun %connect (tx)
   (assert (not (environment-handle-pointer tx)))

@@ -40,6 +40,10 @@
     :commit
     :type (member :commit :rollback :marked-for-commit-only :marked-for-rollback-only)
     :documentation "Used by with-transaction to decide what to do when the with-transaction body finishes without any errors.")
+   (post-connect-hook
+    (constantly nil)
+    :type t				;a funcallable object
+    :documentation "A function of one argument (the tx) to invoke when a connection to the database has been established.")
    (break-on-next-command
     #f
     :type boolean))
@@ -464,6 +468,12 @@
                        :when when
                        :action action)
       (push it (hooks-of transaction)))))
+
+;; I'm keeping things simple for the post-connect hook: It's a single function
+;; in a slot.  I suppose we could instead reuse the fancy hooking machinery
+;; above.
+(def (function e) call-post-connect-hook (tx)
+  (funcall (post-connect-hook-of tx) tx))
 
 (def (function e) savepoint (name)
   (execute (format nil "SAVEPOINT ~a" name)))

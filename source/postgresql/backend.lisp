@@ -155,7 +155,8 @@
                                         (connection-specification-of db)))
                                   (list database user-name password host port)))))))
            (rdbms.debug "Successfully opened Postgresql connection ~A for transaction ~A in database ~A"
-                        it tr db)))))
+                        it tr db)
+	   (call-post-connect-hook tr)))))
 
 (def method cleanup-transaction :after ((tr postgresql-transaction))
   (awhen (slot-value tr 'connection)
