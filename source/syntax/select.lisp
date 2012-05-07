@@ -34,6 +34,9 @@
    (limit
     nil
     :type (or null integer sql-literal))
+   (force-aliases-p
+    nil
+    :type boolean)
    (for
     nil
     :type (member nil :update :share)
@@ -162,6 +165,19 @@
    (when alias
      (format-string " AS ")
      (format-sql-identifier alias))))
+
+(defun force-aliases (select)
+  (setf (force-aliases-p select) t)
+  (setf (columns-of select)
+	(iter (for col in (columns-of select))
+	      (for i from 0)
+	      (let ((alias (etypecase col
+			     (sql-column-alias col)
+			     (t (sql-column-alias :column col)))))
+		(collect (or (alias-of alias)
+			     (setf (alias-of alias) (format nil "c~d" i)))
+		  into identifiers)
+		(collect alias)))))
 
 (defun format-column-reference (x db)
   (typecase x
