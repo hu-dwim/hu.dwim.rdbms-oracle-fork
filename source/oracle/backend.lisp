@@ -426,7 +426,6 @@
 
 (defvar *first-out-position*) ;; 0-based (vs 1-based binding position)
 
-;; TODO THL better then passing these through callback pointers?
 (defvar *dynamic-binding-values*)
 (defvar *dynamic-binding-types*)
 (defvar *dynamic-binding-locators*)
