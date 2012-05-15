@@ -27,6 +27,18 @@
   (:format-sql-syntax-node
    (format-string "NUMERIC")))
 
+(def syntax-node sql-decimal-type (sql-simple-type)
+  ((precision nil :type integer)
+   (scale nil :type integer))
+  (:format-sql-syntax-node
+   (assert (plusp precision))
+   (assert (plusp scale))
+   (format-string "DECIMAL(")
+   (format-number precision)
+   (format-char #\,)
+   (format-number scale)
+   (format-char #\))))
+
 (def syntax-node sql-bit-sized-type (sql-type)
   ((bit-size
     nil

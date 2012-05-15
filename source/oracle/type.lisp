@@ -78,6 +78,13 @@
     :external-type oci:+sqlt-blob+
     :lisp-to-oci 'byte-array-to-blob)
 
+(defun make-typemap/rational (precision scale)
+  (make-typemap
+   :external-type oci:+sqlt-vnu+
+   :lisp-to-oci (lambda (x)
+                  (assert (typep (* x (expt 10 scale)) 'integer))
+                  (rational-to-varnum x :precision precision :scale scale))))
+
 (defun typemap-for-sql-type (type)
   (etypecase type
     (sql-boolean-type
@@ -113,6 +120,8 @@
       ;;       e.g. 1/3 -> 3333.../10000...
       (error "use more specific type with oracle backend") ;; TODO THL handle this better?
       rational/varnum)
+    (sql-decimal-type
+      (make-typemap/rational (precision-of type) (scale-of type)))
     (sql-character-type
       ;; string values stored as CHAR(x) internally
       ;; their external format is zero terminated string
@@ -171,9 +180,10 @@
          boolean/char    ; KLUDGE char(1) assumed to be a boolean
          string/string))
     (#.oci:+sqlt-num+
+     ;;#.oci:+sqlt-vnu+
      (if (and (<= scale 0) (<= (- precision scale) 9))
          integer/varnum
-         rational/varnum))
+         (make-typemap/rational precision scale)))
     (#.oci:+sqlt-dat+ cdate/date)
     (#.oci:+sqlt-ibfloat+ float/bfloat)
     (#.oci:+sqlt-ibdouble+ double/bdouble)
