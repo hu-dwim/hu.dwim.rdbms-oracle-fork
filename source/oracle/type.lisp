@@ -153,7 +153,14 @@
                          (19 (sql-integer-type :bit-size 64)) ; KLUDGE
                          (t (sql-integer-type)))  ; FIXME bit-size lost
                        (sql-integer-type))
-                   (sql-numeric-type)))      ; FIXME scale, precision?
+                   ;; sql-numeric-type is too vague, the only case
+                   ;; where scale is used is the (exact) decimal type,
+                   ;; e.g. for representing money
+                   (if (plusp scale)
+                       (sql-decimal-type :precision precision
+                                         :scale scale)
+                       (error "unexpected numeric type ~s ~s ~s ~s"
+                              data-type char-length precision scale))))
      ("BINARY_FLOAT" (sql-float-type :bit-size 32))
      ("BINARY_DOUBLE" (sql-float-type :bit-size 64))
      ("CHAR" (if (= char-length 1)
@@ -166,7 +173,6 @@
      ("DATE" (sql-date-type))
      ("TIMESTAMP(6)" (sql-timestamp-type))
      ("TIMESTAMP(6) WITH TIME ZONE" (sql-timestamp-with-timezone-type)))))
-
 
 (def function external-type-for-sql-type (type)
   (typemap-external-type (typemap-for-sql-type type)))

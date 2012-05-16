@@ -22,6 +22,20 @@
 (def method format-sql-syntax-node ((type sql-binary-large-object-type) (database postgresql))
   (format-string "BYTEA"))
 
+;; http://stackoverflow.com/questions/3350148/where-are-numeric-precision-and-scale-for-a-field-found-in-the-pg-catalog-tables
+(defun %numeric-type (typname attlen atttypmod attnotnull)
+  (or (if (= -1 atttypmod)
+          (sql-numeric-type)
+          (let ((p (logand #xffff (ash (- atttypmod 4) -16)))
+                (s (logand #xffff (- atttypmod 4))))
+            (when (plusp s)
+              ;; sql-numeric-type is too vague, the only case where
+              ;; scale is used is the (exact) decimal type, e.g. for
+              ;; representing money
+              (sql-decimal-type :precision p :scale s))))
+      (error "unexpected sql type ~s ~s ~s ~s"
+             typname attlen atttypmod attnotnull)))
+
 (def function sql-type-for-internal-type (description)
   (let ((type-name (first-elt description)))
     (flet ((native-size (x)
@@ -37,7 +51,7 @@
                        ("int8" (make-instance 'sql-integer-type :bit-size 64))
                        ("float4" (make-instance 'sql-float-type :bit-size 32))
                        ("float8" (make-instance 'sql-float-type :bit-size 64))
-                       ("numeric" (make-instance 'sql-numeric-type))
+                       ("numeric" (apply '%numeric-type (coerce description 'list)))
                        ("bool" (make-instance 'sql-boolean-type))
                        ("char" (make-instance 'sql-character-type :size (native-size (elt description 2))))
                        ("bpchar" (make-instance 'sql-character-type :size (native-size (elt description 2))))
