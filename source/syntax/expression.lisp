@@ -26,7 +26,8 @@
 
 (defun find-column-alias (query table-name column-name)
   (find-if (lambda (column-alias)
-	     (and (equal (table-of column-alias) table-name)
+	     (and (typep column-alias 'sql-column-alias)
+		  (equal (table-of column-alias) table-name)
 		  (equal (column-of column-alias) column-name)))
 	   (columns-of query)))
 
@@ -60,15 +61,23 @@
 		       ;;
 		       ;; We need (named) column aliases for sorting.
 		       ;;
-		       (dolist (updateme (list key col))
-			 (let ((this-name (alias-of updateme)))
-			   (cond
-			     ((null this-name)
-			      (setf (alias-of updateme) name))
-			     ((equal name this-name))
-			     (t
-			      (error "inconsistent column aliases in ORDER BY specs for ~A"
-				     key))))))
+		       (let ((name
+			      (if (typep name 'named-sql-syntax-node)
+				  (name-of name)
+				  name)))
+			 (dolist (updateme (list key col))
+			   (let* ((this-name (alias-of updateme))
+				  (this-name
+				   (if (typep this-name 'named-sql-syntax-node)
+				       (name-of this-name)
+				       this-name))) 
+			     (cond
+			       ((null this-name)
+				(setf (alias-of updateme) name))
+			       ((equal name this-name))
+			       (t
+				(error "inconsistent column aliases in ORDER BY specs for ~A"
+				       key)))))))
 		 1st))
 	     order-bys))))
 
@@ -91,12 +100,26 @@
     nil
     :type (or null integer)))
   (:format-sql-syntax-node
+   ;; FIXME: little shared code between PG and ORACLE is left here.  Maybe
+   ;; replace with one method in each backend directory.
    (let ((actual-subqueries (mapcar (lambda (x)
 				      (etypecase x
 					(sql-select x)
 					(sql-subquery (query-of x))))
-				    subqueries)))
-
+				    subqueries))
+	 (rownump (and (or limit offset)
+		      (eq (backend-type database) :oracle))))
+     ;; OFFSET and LIMIT handling
+     (when rownump
+       (mapc #'force-aliases actual-subqueries)
+       (let ((aliases (mapcar #'alias-of (columns-of (car actual-subqueries)))))
+	 (format-string "SELECT ")
+	 (format-comma-separated-identifiers aliases)
+	 (format-string " FROM (SELECT ")
+	 (format-comma-separated-identifiers aliases)
+	 (format-string ", ROWNUM n FROM (")))
+     (assert (notany #'limit-of actual-subqueries))
+     (assert (notany #'offset-of actual-subqueries))
      ;; Kludge or Feature?
      ;;
      ;; Ordinarily, the ordering of set operations is not well-defined without
@@ -134,13 +157,29 @@
 
        (when outer-order-by
 	 (format-string " ORDER BY ")
-	 (format-comma-separated-list outer-order-by))))
-   (when limit
-     (format-string " LIMIT ")
-     (format-sql-syntax-node limit))
-   (when offset
-     (format-string " OFFSET ")
-     (format-sql-syntax-node offset))))
+	 (format-comma-separated-list outer-order-by)))
+
+     (cond
+       (rownump
+	(mapc #'force-aliases actual-subqueries)
+	(format-string ")) WHERE ")
+	(when offset
+	  (format-sql-syntax-node offset)
+	  (format-string " < n"))
+	(when limit
+	  (when offset
+	    (format-string " AND ")
+	    (format-sql-syntax-node offset)
+	    (format-string " + ")) 
+	  (format-sql-syntax-node limit)
+	  (format-string " >= n")))
+       (t
+	(when limit
+	  (format-string " LIMIT ")
+	  (format-sql-syntax-node limit))
+	(when offset
+	  (format-string " OFFSET ")
+	  (format-sql-syntax-node offset)))))))
 
 (def definer set-operation (name)
   (let ((constructor-name (sql-constructor-name name)))

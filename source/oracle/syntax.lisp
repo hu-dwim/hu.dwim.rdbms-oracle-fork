@@ -192,7 +192,7 @@
                    (format-string " NOWAIT")))))
       (cond
         ((and (not limit) (not offset))
-         (core nil))
+         (core (force-aliases-p self)))
         ((and limit (not offset))
          (format-string "SELECT")
          (cols nil t nil #'format-col)
