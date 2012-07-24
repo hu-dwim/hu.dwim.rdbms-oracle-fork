@@ -28,8 +28,8 @@
    (format-string "NUMERIC")))
 
 (def syntax-node sql-decimal-type (sql-simple-type)
-  ((precision nil :type integer)
-   (scale nil :type integer))
+  ((precision nil :type (or null integer))
+   (scale nil :type (or null integer)))
   (:format-sql-syntax-node
    (assert (plusp precision))
    (assert (plusp scale))
