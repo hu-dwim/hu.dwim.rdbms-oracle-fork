@@ -364,8 +364,8 @@
 
 (def syntax-node sql-like (sql-expression)
   ((string :type  sql-expression :accessor string-of)
-   (pattern :type sql-expression)
-   (case-sensitive-p #t :type boolean))
+   (pattern :type (or sql-literal sql-expression))
+   (case-sensitive-p t :type boolean))
   (:format-sql-syntax-node
    (if case-sensitive-p
        (progn
