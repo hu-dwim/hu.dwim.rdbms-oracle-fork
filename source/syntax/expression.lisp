@@ -95,10 +95,10 @@
     :type list)                         ; TODO: element type
    (limit
     nil
-    :type (or null integer))
+    :type (or null integer sql-literal))
    (offset
     nil
-    :type (or null integer)))
+    :type (or null integer sql-literal)))
   (:format-sql-syntax-node
    ;; FIXME: little shared code between PG and ORACLE is left here.  Maybe
    ;; replace with one method in each backend directory.
@@ -153,7 +153,7 @@
 				(:except (ecase (backend-type database)
 					   (:postgresql "EXCEPT")
 					   (:oracle "MINUS")))
-				(:intersection "INTERSECT")))
+				(:intersect "INTERSECT")))
 
        (when outer-order-by
 	 (format-string " ORDER BY ")
@@ -363,7 +363,7 @@
 ;;; Pattern matching
 
 (def syntax-node sql-like (sql-expression)
-  ((string :type  sql-expression :accessor string-of)
+  ((string :type (or sql-expression sql-column-alias) :accessor string-of)
    (pattern :type (or sql-literal sql-expression))
    (case-sensitive-p t :type boolean))
   (:format-sql-syntax-node
