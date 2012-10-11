@@ -29,7 +29,7 @@
    (format-string " (")
    (format-comma-separated-list columns)
    (format-char ")")
-   (when (and temporary (not (eq temporary #t)) (not as))
+   (when (and temporary (not (eq temporary t)) (not as))
      (format-string " ON COMMIT ")
      (format-string (ecase temporary
                       (:drop "DROP")

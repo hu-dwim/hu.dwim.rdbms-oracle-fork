@@ -85,7 +85,7 @@
   ((set-operation
     :type (member :union :except :intersect))
    (all
-    #f
+    nil
     :type boolean)
    (subqueries
     nil
