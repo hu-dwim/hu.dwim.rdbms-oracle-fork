@@ -14,7 +14,7 @@
 (def method transaction-mixin-class list ((db oracle))
   'oracle-transaction)
 
-(defvar *pooling* :session) ;; :session :connection :none
+(defparameter *pooling* :connection) ;; :session :connection :none
 
 (def class* oracle-transaction (transaction)
   ((environment-handle-pointer nil :accessor environment-handle-pointer)
