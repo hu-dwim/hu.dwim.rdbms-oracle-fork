@@ -64,6 +64,16 @@
   ((type nil
     :type sql-type)))
 
+(defun escape-sql-string (string)
+  ;; http://dbaspot.com/forums/postgresql/251026-many-warning-pg-logs-nonstandard-use-string-literalat-character.html
+  (with-output-to-string (s)
+    (loop
+       for c across string
+       do (case c
+            (#\' (princ "''" s))
+            (#\\ (princ "\\\\" s))
+            (t (write-char c s))))))
+
 (def generic format-sql-literal (literal database)
   (:documentation "Formats an SQL literal into *sql-stream*.")
 
@@ -81,7 +91,7 @@
   
   (:method ((literal string) database)
            (format-char "'")
-           (format-string (sexp2sql:escape-sql-string literal))
+           (format-string (escape-sql-string literal))
            (format-char "'"))
 
   (:method ((literal list) database)
