@@ -17,7 +17,6 @@
                :hu.dwim.syntax-sugar+hu.dwim.walker
                :hu.dwim.util
                :hu.dwim.walker
-               :sexp2sql
                :ironclad
                :local-time)
   :components ((:module "source"
